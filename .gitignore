@@ -1,0 +1,16 @@
+__pycache__*
+_data*
+corpora/
+.idea/
+*.xml
+htmlcov/
+secrets.env
+.coverage
+*.sqlite
+/logs
+tmp/
+.venv/
+.pytest_cache/
+.claude/
+.worktrees/
+llm_response.txt
