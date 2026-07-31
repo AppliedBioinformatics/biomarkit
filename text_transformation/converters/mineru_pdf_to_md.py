@@ -159,10 +159,9 @@ class MinerUPdfConverter(Converter):
 
     def _build_output_path(self, pub: Publication) -> Path:
         """
-        Returns the path MinerU writes the markdown file to.
-        MinerU creates: output_dir/<stem>/<parse_dir>/<stem>.md, where
-        <parse_dir> is "auto" for the pipeline backend and "vlm" for the
-        remote vLLM backend.
+        Returns the path to the content_list_v2.json file MinerU produces.
+        MinerU creates: output_dir/<stem>/<parse_dir>/<stem>_content_list_v2.json, where
+        <parse_dir> is "auto" for the pipeline backend and "vlm" for the remote vLLM backend.
 
         Parameters
         ----------
@@ -170,14 +169,14 @@ class MinerUPdfConverter(Converter):
 
         Returns
         -------
-        Path - Path to the .md file produced by MinerU.
+        Path - Path to the content_list_v2.json file produced by MinerU.
         """
         stem = pub.publication_filepath.stem
-        return self.output_dir / stem / MINERU_PARSE_DIR[self.mineru_endpoint] / f"{stem}.md"
+        return self.output_dir / stem / MINERU_PARSE_DIR[self.mineru_endpoint] / f"{stem}_content_list_v2.json"
 
     def convert(self, pub: Publication) -> Path | None:
         """
-        Collects the markdown produced for one publication by the batched
+        Collects the content_list_v2.json produced for one publication by the batched
         MinerU run in convert_all().
 
         Parameters
@@ -186,12 +185,12 @@ class MinerUPdfConverter(Converter):
 
         Returns
         -------
-        Path - Path to the .md file, or None if MinerU produced no output for it.
+        Path - Path to the content_list_v2.json file, or None if MinerU produced no output for it.
         """
-        md_path = self._build_output_path(pub)
-        if not md_path.exists():
-            logging.warning(f"MinerU produced no .md file for {pub.doi} at {md_path}.")
+        json_path = self._build_output_path(pub)
+        if not json_path.exists():
+            logging.warning(f"MinerU produced no content_list_v2.json for {pub.doi} at {json_path}.")
             return None
 
-        logging.info(f"MinerU converted {pub.doi} → {md_path}")
-        return md_path
+        logging.info(f"MinerU converted {pub.doi} → {json_path}")
+        return json_path

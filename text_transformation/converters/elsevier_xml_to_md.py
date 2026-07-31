@@ -12,6 +12,7 @@ Features:
 - Preserves document structure with proper heading levels
 """
 
+import json
 import logging
 import re
 import xml.etree.ElementTree as ET
@@ -997,22 +998,173 @@ def parse_elsevier_xml(xml_path: str, organize_floats: bool = True) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Block-format helpers (content_list_v2.json output)
+# ---------------------------------------------------------------------------
+
+def _spans(text: str) -> list:
+    """Split text containing $...$ inline math into TextSpan / InlineEquation dicts."""
+    parts = re.split(r'(\$[^$]+\$)', text)
+    result = []
+    for p in parts:
+        if not p:
+            continue
+        if p.startswith('$') and p.endswith('$') and len(p) > 2:
+            result.append({"type": "equation_inline", "content": p[1:-1]})
+        else:
+            result.append({"type": "text", "content": p})
+    return result or [{"type": "text", "content": ""}]
+
+
+def _para_block(text: str) -> dict:
+    return {"type": "paragraph", "content": {"paragraph_content": _spans(text)}, "bbox": [0, 0, 0, 0]}
+
+
+def _title_block(text: str, level: int) -> dict:
+    return {"type": "title", "content": {"title_content": _spans(text), "level": level}, "bbox": [0, 0, 0, 0]}
+
+
+def _table_block(table: ET.Element) -> dict | None:
+    """Convert a ce:table element to a TableBlock dict with HTML content."""
+    label_elem = _find(table, "ce:label")
+    label = clean_text(label_elem.text) if label_elem is not None and label_elem.text else ""
+
+    caption_spans = []
+    caption = _find(table, "ce:caption")
+    if caption is not None:
+        for para in caption.iter(_ns("ce:simple-para")):
+            caption_text = clean_text(get_element_text(para))
+            if caption_text:
+                prefix = f"{label}: " if label else ""
+                caption_spans = _spans(prefix + caption_text)
+                break
+
+    html = None
+    for child in table.iter():
+        if child.tag.rsplit("}", 1)[-1] == "tgroup":
+            rows_data = _parse_cals_tgroup(child)
+            if rows_data:
+                header, body = rows_data
+                rows_html = ""
+                if header:
+                    cells = "".join(f"<th>{c}</th>" for c in header)
+                    rows_html += f"<tr>{cells}</tr>"
+                for row in body:
+                    cells = "".join(f"<td>{c}</td>" for c in row)
+                    rows_html += f"<tr>{cells}</tr>"
+                html = f"<table>{rows_html}</table>"
+            break
+
+    if not caption_spans and html is None:
+        return None
+
+    return {
+        "type": "table",
+        "content": {
+            "table_caption": caption_spans,
+            "table_footnote": [],
+            "html": html,
+            "table_nest_level": 1,
+        },
+        "bbox": [0, 0, 0, 0],
+    }
+
+
+def _section_to_blocks(section: ET.Element, level: int = 2) -> list:
+    """Recursively convert a ce:section into a list of block dicts."""
+    blocks = []
+    label_elem = _find(section, "ce:label")
+    title_elem = _find(section, "ce:section-title")
+    label = clean_text(get_element_text(label_elem)) if label_elem is not None else ""
+    title = clean_text(get_element_text(title_elem)) if title_elem is not None else ""
+    if title:
+        heading = f"{label} {title}".strip() if label else title
+        blocks.append(_title_block(heading, level))
+
+    for child in section:
+        local = child.tag.rsplit("}", 1)[-1] if "}" in child.tag else child.tag
+        if local in ("para", "simple-para"):
+            text = clean_text(get_element_text(child))
+            if text:
+                blocks.append(_para_block(text))
+        elif local == "section":
+            blocks.extend(_section_to_blocks(child, level=level + 1))
+        elif local == "table":
+            tb = _table_block(child)
+            if tb:
+                blocks.append(tb)
+        # figures skipped — no image files exist for XML publications
+    return blocks
+
+
+def parse_elsevier_xml_to_blocks(xml_path: str) -> list:
+    """
+    Parse an Elsevier full-text XML file and return a content_list_v2.json-compatible
+    structure: a list of pages, each page being a list of block dicts.
+
+    XML has no page concept so all blocks are placed in a single page.
+
+    Parameters
+    ----------
+    xml_path : str - Path to the Elsevier XML file.
+
+    Returns
+    -------
+    list[list[dict]] - Single-element list (one page) containing all content blocks.
+    """
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    blocks = []
+
+    title = extract_title(root)
+    if title:
+        blocks.append(_title_block(title, level=1))
+
+    abstract = extract_abstract(root)
+    if abstract:
+        blocks.append(_title_block("Abstract", level=2))
+        for para in abstract.split("\n\n"):
+            if para.strip():
+                blocks.append(_para_block(para.strip()))
+
+    for elem in root.iter(_ns("ce:sections")):
+        for child in elem:
+            local = child.tag.rsplit("}", 1)[-1] if "}" in child.tag else child.tag
+            if local == "section":
+                blocks.extend(_section_to_blocks(child, level=2))
+        break  # only first ce:sections block
+
+    # Tables from ce:floats that were not inline in a section
+    for float_block in root.iter(_ns("ce:floats")):
+        for child in float_block:
+            local = child.tag.rsplit("}", 1)[-1] if "}" in child.tag else child.tag
+            if local == "table":
+                tb = _table_block(child)
+                if tb:
+                    blocks.append(tb)
+
+    refs = extract_references(root)
+    if refs:
+        blocks.append(_title_block("References", level=2))
+        for ref in refs:
+            blocks.append(_para_block(ref))
+
+    return [blocks]
+
+
+# ---------------------------------------------------------------------------
 # Converter class
 # ---------------------------------------------------------------------------
 
 class ElsevierXmlConverter(Converter):
     """
-    Converts Elsevier full-text XML publications to raw markdown.
+    Converts Elsevier full-text XML publications to content_list_v2.json format.
     Inherits iteration, caching, and error handling from Converter.
     """
 
-    def __init__(self, publication_list: List[Publication], organize_floats: bool = True):
-        super().__init__(publication_list)
-        self.organize_floats = organize_floats
-
     def convert(self, pub: Publication) -> Path | None:
         """
-        Parses a single Elsevier XML file and writes the result to RAW_MARKDOWN_DIR.
+        Parses a single Elsevier XML file and writes a content_list_v2.json to
+        RAW_MARKDOWN_DIR/<stem>/auto/<stem>_content_list_v2.json.
 
         Parameters
         ----------
@@ -1020,13 +1172,13 @@ class ElsevierXmlConverter(Converter):
 
         Returns
         -------
-        Path to the written markdown file, or None if conversion failed.
+        Path to the written JSON file, or None if conversion failed.
         """
         output_path = self._build_output_path(pub)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        markdown = parse_elsevier_xml(str(pub.publication_filepath), organize_floats=self.organize_floats)
-        output_path.write_text(markdown, encoding="utf-8")
+        blocks = parse_elsevier_xml_to_blocks(str(pub.publication_filepath))
+        output_path.write_text(json.dumps(blocks, ensure_ascii=False), encoding="utf-8")
 
         logging.info(f"Elsevier XML converted for {pub.doi} → {output_path}")
         return output_path

@@ -33,13 +33,13 @@ def _make_conversion_df(
     records = []
 
     for pub in newly_converted:
-        success = pub.raw_md_filepath is not None
+        success = pub.content_json_filepath is not None
         size_kb = 0.0
         if success:
             try:
-                size_kb = pub.raw_md_filepath.stat().st_size / 1024
+                size_kb = pub.content_json_filepath.stat().st_size / 1024
             except OSError:
-                logging.warning(f"Could not stat {pub.raw_md_filepath} for {pub.doi} -- recording size as 0.")
+                logging.warning(f"Could not stat {pub.content_json_filepath} for {pub.doi} -- recording size as 0.")
         records.append({
             "doi": pub.doi,
             "publisher": pub.publisher,
@@ -52,11 +52,11 @@ def _make_conversion_df(
 
     for pub in pre_cached:
         size_kb = 0.0
-        if pub.raw_md_filepath is not None:
+        if pub.content_json_filepath is not None:
             try:
-                size_kb = pub.raw_md_filepath.stat().st_size / 1024
+                size_kb = pub.content_json_filepath.stat().st_size / 1024
             except OSError:
-                logging.warning(f"Could not stat {pub.raw_md_filepath} for {pub.doi} -- recording size as 0.")
+                logging.warning(f"Could not stat {pub.content_json_filepath} for {pub.doi} -- recording size as 0.")
         records.append({
             "doi": pub.doi,
             "publisher": pub.publisher,

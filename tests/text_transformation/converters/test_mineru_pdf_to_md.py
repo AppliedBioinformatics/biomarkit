@@ -11,11 +11,11 @@ def _make_pub(doi: str, tmp_path: Path) -> Publication:
 
 
 def _make_md(converter, pub) -> Path:
-    """Creates the .md file MinerU would produce for pub and returns its path."""
-    md_file = converter._build_output_path(pub)
-    md_file.parent.mkdir(parents=True, exist_ok=True)
-    md_file.touch()
-    return md_file
+    """Creates the content_list_v2.json file MinerU would produce for pub and returns its path."""
+    json_file = converter._build_output_path(pub)
+    json_file.parent.mkdir(parents=True, exist_ok=True)
+    json_file.touch()
+    return json_file
 
 
 FAKE_MINERU = Path("/fake/mineru.exe")
@@ -58,7 +58,7 @@ def test_build_output_path_uses_mineru_structure(tmp_path):
 
     result = converter._build_output_path(pub)
 
-    assert result == tmp_path / stem / "auto" / f"{stem}.md"
+    assert result == tmp_path / stem / "auto" / f"{stem}_content_list_v2.json"
 
 
 def test_build_output_path_uses_vlm_subdir_for_vllm_endpoint(tmp_path):
@@ -71,14 +71,14 @@ def test_build_output_path_uses_vlm_subdir_for_vllm_endpoint(tmp_path):
 
     result = converter._build_output_path(pub)
 
-    assert result == tmp_path / stem / "vlm" / f"{stem}.md"
+    assert result == tmp_path / stem / "vlm" / f"{stem}_content_list_v2.json"
 
 
 # ---------------------------------------------------------------------------
 # convert — collects the output of the batched run
 # ---------------------------------------------------------------------------
 
-def test_convert_returns_md_path(tmp_path):
+def test_convert_returns_json_path(tmp_path):
     from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
 
     pub = _make_pub("10.1000/D", tmp_path)
@@ -91,7 +91,7 @@ def test_convert_returns_md_path(tmp_path):
     assert result == md_file
 
 
-def test_convert_returns_none_when_md_missing(tmp_path):
+def test_convert_returns_none_when_json_missing(tmp_path):
     from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
 
     pub = _make_pub("10.1000/G", tmp_path)
@@ -137,7 +137,7 @@ def test_convert_all_runs_mineru_once_for_all_pubs(tmp_path):
     assert cmd[cmd.index("-o") + 1] == str(tmp_path)
     assert cmd[cmd.index("-b") + 1] == "pipeline"
     assert cmd[cmd.index("-l") + 1] == MINERU_OCR_LANG
-    assert all(pub.raw_md_filepath == converter._build_output_path(pub) for pub in pubs)
+    assert all(pub.content_json_filepath == converter._build_output_path(pub) for pub in pubs)
 
 
 def test_convert_all_vllm_uses_http_client_backend(tmp_path):
@@ -169,7 +169,7 @@ def test_convert_all_vllm_uses_http_client_backend(tmp_path):
     assert cmd[cmd.index("-u") + 1] == "http://vllm-host:30000"
     assert "-l" not in cmd
     assert captured["env"]["MINERU_VL_API_KEY"] == "test-key"
-    assert pub.raw_md_filepath == converter._build_output_path(pub)
+    assert pub.content_json_filepath == converter._build_output_path(pub)
 
 
 def test_convert_all_local_does_not_leak_vl_api_key(tmp_path, monkeypatch):
@@ -232,8 +232,8 @@ def test_convert_all_does_not_restage_existing_outputs(tmp_path):
         converter.convert_all()
 
     assert captured["staged"] == [new_pub.publication_filepath.name]
-    assert done_pub.raw_md_filepath == converter._build_output_path(done_pub)
-    assert new_pub.raw_md_filepath == converter._build_output_path(new_pub)
+    assert done_pub.content_json_filepath == converter._build_output_path(done_pub)
+    assert new_pub.content_json_filepath == converter._build_output_path(new_pub)
     assert mock_cache.call_count == 2
 
 
@@ -253,7 +253,7 @@ def test_convert_all_skips_batch_when_all_outputs_exist(tmp_path):
         converter.convert_all()
 
     mock_run.assert_not_called()
-    assert all(pub.raw_md_filepath == converter._build_output_path(pub) for pub in pubs)
+    assert all(pub.content_json_filepath == converter._build_output_path(pub) for pub in pubs)
     assert mock_cache.call_count == 2
 
 
@@ -275,8 +275,8 @@ def test_convert_all_nonzero_exit_still_collects_outputs(tmp_path):
          patch.object(converter, "_cache_result") as mock_cache:
         converter.convert_all()
 
-    assert ok_pub.raw_md_filepath == converter._build_output_path(ok_pub)
-    assert bad_pub.raw_md_filepath is None
+    assert ok_pub.content_json_filepath == converter._build_output_path(ok_pub)
+    assert bad_pub.content_json_filepath is None
     mock_cache.assert_called_once_with(ok_pub)
 
 

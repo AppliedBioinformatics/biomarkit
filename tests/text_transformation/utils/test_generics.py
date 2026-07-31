@@ -243,7 +243,7 @@ DB_SCHEMA = """
     doi TEXT UNIQUE NOT NULL,
     downloaded_from TEXT NOT NULL,
     publication_filepath TEXT NOT NULL,
-    raw_md_filepath TEXT,
+    content_json_filepath TEXT,
     final_md_filepath TEXT)
 """
 
@@ -258,8 +258,8 @@ def _make_test_db(rows: list[dict]) -> None:
     with _sqlite3.connect(TMP_TEST_DB) as conn:
         conn.execute(DB_SCHEMA)
         conn.executemany(
-            "INSERT INTO cache (doi, downloaded_from, publication_filepath, raw_md_filepath, final_md_filepath) "
-            "VALUES (:doi, :downloaded_from, :publication_filepath, :raw_md_filepath, :final_md_filepath)",
+            "INSERT INTO cache (doi, downloaded_from, publication_filepath, content_json_filepath, final_md_filepath) "
+            "VALUES (:doi, :downloaded_from, :publication_filepath, :content_json_filepath, :final_md_filepath)",
             rows,
         )
 
@@ -286,11 +286,11 @@ def test_check_cache_for_markdowns_mixed(caplog):
 
     _make_test_db([
         {"doi": "10.1/a", "downloaded_from": "unpaywall", "publication_filepath": "/f/a.pdf",
-         "raw_md_filepath": "/r/a.md", "final_md_filepath": "/f/a.md"},
+         "content_json_filepath": "/r/a.md", "final_md_filepath": "/f/a.md"},
         {"doi": "10.1/b", "downloaded_from": "wiley",     "publication_filepath": "/f/b.pdf",
-         "raw_md_filepath": "/r/b.md", "final_md_filepath": None},
+         "content_json_filepath": "/r/b.md", "final_md_filepath": None},
         {"doi": "10.1/c", "downloaded_from": "springer",  "publication_filepath": "/f/c.pdf",
-         "raw_md_filepath": None,      "final_md_filepath": None},
+         "content_json_filepath": None,      "final_md_filepath": None},
     ])
 
     with caplog.at_level("INFO", logger="root"):
