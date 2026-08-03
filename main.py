@@ -31,7 +31,7 @@ def create_corpus(name: str) -> Path:
     Path - Path to the corpus folder.
     """
     from config import (
-        CORPORA_DIR, DOWNLOAD_DIR, RAW_MARKDOWN_DIR, FINAL_MARKDOWN_DIR, REPORT_DIR, LOG_DIR,
+        CORPORA_DIR, DOWNLOAD_DIR, JSON_STRUCT_DIR, FINAL_MARKDOWN_DIR, REPORT_DIR, LOG_DIR,
     )
 
     name = name.strip()
@@ -45,7 +45,7 @@ def create_corpus(name: str) -> Path:
         logging.warning(f"Corpus '{name}' already exists at {corpus_dir} — leaving existing contents untouched.")
 
     for subdir_name in (
-        DOWNLOAD_DIR.name, RAW_MARKDOWN_DIR.name, FINAL_MARKDOWN_DIR.name, REPORT_DIR.name, LOG_DIR.name,
+            DOWNLOAD_DIR.name, JSON_STRUCT_DIR.name, FINAL_MARKDOWN_DIR.name, REPORT_DIR.name, LOG_DIR.name,
     ):
         (corpus_dir / subdir_name).mkdir(parents=True, exist_ok=True)
 
@@ -230,23 +230,21 @@ def standardise_text(publications: list[Publication],
 if __name__ == "__main__":
 
     setup_logging(level=logging.INFO)
-    logging.info("Starting full pipeline.")
+    logging.info("Complete a full new corpus conversion.")
 
-    publications = extract_text(check_opensource=True, scopus_report=False)
+    # Make new corpus.
+    from text_extraction.utils.generics import build_new_corpus
+    build_new_corpus(name="my_corpus", scopus_file="path/to/scopus.csv")
 
-    logging.info("Download stage completed - Starting markdown conversion.")
-    transform_start = perf_counter()
+    # Download.
+    publications = extract_text(check_opensource=True, scopus_report=True)
+    logging.info("Corpus download completed.")
+
+    # Convert.
     publications = transform_text(publications, skip_conversion=False)
-    transform_seconds = perf_counter() - transform_start
-    logging.info("transform_text() complete in %.2fs. Starting standardise_text().", transform_seconds)
+    logging.info("Corpus transformation completed.")
 
+    # Standardise.
     logging.info("Conversion of first paper may take longer due to model weight download.")
-    standardise_start = perf_counter()
     standardise_text(publications, keep_latex=False, keep_tables=False, force_imrad_structure=True)
-    standardise_seconds = perf_counter() - standardise_start
-    logging.info("standardise_text() complete in %.2fs.", standardise_seconds)
-
-    logging.info(
-        "Pipeline complete — transform: %.2fs | standardise: %.2fs | total conversion: %.2fs",
-        transform_seconds, standardise_seconds, transform_seconds + standardise_seconds,
-    )
+    logging.info("Corpus standardisation completed.")

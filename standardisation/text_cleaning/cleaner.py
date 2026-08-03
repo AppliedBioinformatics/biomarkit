@@ -21,7 +21,6 @@ from text_extraction.database.database import update_final_md_filepath
 
 # Strips leading section numbering (e.g. "1.", "II.", "§3") before matching heading text.
 _SECTION_PREFIX_RE = re.compile(r'^[\d\s.\-–—\xa7IVXivx]+')
-
 _INTRO_RE = re.compile(r'^(introduction|background)\b')
 _METHODS_RE = re.compile(
     r'^(methods|materials\s+(?:and|&)\s+methods|methodology'
@@ -49,7 +48,7 @@ class Cleaner:
         self.keep_references = context["keep_references"]
         self.force_imrad_structure = context["force_imrad_structure"]
 
-    def truncate_core_text(self, blocks):
+    def _truncate_core_text(self, blocks):
         pass
 
     # --- Shared heading helpers ---
@@ -150,9 +149,24 @@ class Cleaner:
             if isinstance(block, TitleBlock)
         }
 
-    # --- IMRAD structure methods ---
+    @staticmethod
+    def _trim_to_core_text(blocks) -> list:
+        intro_idx = next(
+            (i for i, b in enumerate(blocks)
+             if isinstance(b, TitleBlock) and b.content.text == "Introduction"),
+            None,
+        )
+        end_idx = next(
+            (i for i, b in enumerate(blocks)
+             if isinstance(b, TitleBlock) and b.content.text == "end"),
+            None,
+        )
+        start = intro_idx if intro_idx is not None else 0
+        stop = end_idx if end_idx is not None else len(blocks)
+        return blocks[start:stop]
 
-    def find_introduction_start(self, blocks) -> list:
+    # --- IMRAD structure methods ---
+    def _find_introduction_start(self, blocks) -> list:
         for block in blocks:
             if isinstance(block, TitleBlock) and self._is_intro_heading(block):
                 logging.info("[Cleaner] Introduction found via regex")
@@ -172,7 +186,7 @@ class Cleaner:
         logging.warning("[Cleaner] find_introduction_start: LLM could not identify introduction")
         return blocks
 
-    def find_core_text_end(self, blocks) -> list:
+    def _find_core_text_end(self, blocks) -> list:
         blocks_context = self._build_headings_context(blocks)
         if not blocks_context:
             logging.warning("[Cleaner] find_core_text_end: no headings found")
@@ -186,23 +200,7 @@ class Cleaner:
         logging.warning("[Cleaner] find_core_text_end: LLM could not identify end of core text")
         return blocks
 
-    @staticmethod
-    def trim_to_core_text(blocks) -> list:
-        intro_idx = next(
-            (i for i, b in enumerate(blocks)
-             if isinstance(b, TitleBlock) and b.content.text == "Introduction"),
-            None,
-        )
-        end_idx = next(
-            (i for i, b in enumerate(blocks)
-             if isinstance(b, TitleBlock) and b.content.text == "end"),
-            None,
-        )
-        start = intro_idx if intro_idx is not None else 0
-        stop = end_idx if end_idx is not None else len(blocks)
-        return blocks[start:stop]
-
-    def enforce_imrad_headings(self, blocks) -> list:
+    def _enforce_imrad_headings(self, blocks) -> list:
         headings_context = self._build_headings_context(blocks)
 
         # Methods (required)
@@ -265,14 +263,32 @@ class Cleaner:
 
         return blocks
 
-    def build_imrad_structure(self, blocks) -> list:
-        blocks = self.find_introduction_start(blocks)
-        blocks = self.find_core_text_end(blocks)
-        blocks = self.trim_to_core_text(blocks)
-        blocks = self.enforce_imrad_headings(blocks)
+    def _build_imrad_structure(self, blocks) -> list:
+        blocks = self._find_introduction_start(blocks)
+        blocks = self._find_core_text_end(blocks)
+        blocks = self._trim_to_core_text(blocks)
+        blocks = self._enforce_imrad_headings(blocks)
         return blocks
 
     def clean_from_json(self, pub: Publication):
+        """
+        Cleans and processes a publication's content from its JSON structure file into markdown format.
+
+        The method processes the content of a given publication's JSON file by first applying transformations such as
+        removing boilerplate blocks, references, figures, tables, and LaTeX, based on user preferences.
+        Additionally, it supports optional restructuring of content into the IMRaD (Introduction, Methods, Results,
+        and Discussion) structure.
+
+        Processed content is rendered into markdown format, saved to a specified directory,
+        and updates the publication's cache with the markdown file path if caching is enabled.
+
+        Parameters:
+            pub (Publication): The publication object containing paths and metadata required
+                for processing its content.
+
+        Returns:
+            str: The final processed content in markdown format.
+        """
         json_path = Path(pub.content_json_filepath)
         doc = Document.from_file(json_path)
 
@@ -290,7 +306,7 @@ class Cleaner:
             blocks = remove_latex(blocks)
 
         if self.force_imrad_structure:
-            blocks = self.build_imrad_structure(blocks)
+            blocks = self._build_imrad_structure(blocks)
 
         # Render final markdown from the blocks, save it and update cache accordingly.
         markdown = render(blocks)
@@ -307,5 +323,18 @@ class Cleaner:
         return markdown
 
     def clean_all(self):
+        """
+        Cleans all publication objects in self.publications
+
+        This method iterates through a collection of publications and initiates
+        a cleaning operation for each publication by calling the `clean_from_json`
+        method.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
         for publication in self.publications:
             self.clean_from_json(pub=publication)

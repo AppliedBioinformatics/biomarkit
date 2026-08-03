@@ -2,7 +2,7 @@ import logging
 import shutil
 import sqlite3
 from pathlib import Path
-from config import RAW_MARKDOWN_DIR, FINAL_MARKDOWN_DIR, BASE_DIR, DB_CACHE_FILE
+from config import JSON_STRUCT_DIR, FINAL_MARKDOWN_DIR, BASE_DIR, DB_CACHE_FILE
 
 MINERU_ENDPOINT_CHOICES = ("local", "vllm")
 
@@ -72,7 +72,7 @@ def check_transformation_filepaths() -> None:
     """
     Checks that RAW_MARKDOWN_DIR and FINAL_MARKDOWN_DIR exist, creating them if not.
     """
-    for directory in (RAW_MARKDOWN_DIR, FINAL_MARKDOWN_DIR):
+    for directory in (JSON_STRUCT_DIR, FINAL_MARKDOWN_DIR):
         if not directory.exists():
             logging.info(f"SETUP - Directory not found, creating: {directory}")
             directory.mkdir(parents=True, exist_ok=True)

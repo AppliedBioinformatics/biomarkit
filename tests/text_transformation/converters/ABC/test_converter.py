@@ -80,10 +80,10 @@ def test_build_output_path_places_json_in_auto_subdir(tmp_path):
 
 def test_default_output_dir_is_raw_markdown_dir():
     """Default output_dir is RAW_MARKDOWN_DIR."""
-    from config import RAW_MARKDOWN_DIR
+    from config import JSON_STRUCT_DIR
     cls = _make_converter_class(lambda p: None)
     converter = cls(publication_list=[])
-    assert converter.output_dir == RAW_MARKDOWN_DIR
+    assert converter.output_dir == JSON_STRUCT_DIR
 
 
 # ---------------------------------------------------------------------------

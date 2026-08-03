@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import List
 
-from config import DB_CACHE_FILE, RAW_MARKDOWN_DIR
+from config import DB_CACHE_FILE, JSON_STRUCT_DIR
 from text_extraction.basemodels.publication import Publication
 from text_extraction.database.database import update_content_json_filepath
 
@@ -25,7 +25,7 @@ class Converter(ABC):
 
     def __init__(self, publication_list: List[Publication]):
         self.publication_list = publication_list
-        self.output_dir = RAW_MARKDOWN_DIR
+        self.output_dir = JSON_STRUCT_DIR
         self.cache = DB_CACHE_FILE
 
     @abstractmethod

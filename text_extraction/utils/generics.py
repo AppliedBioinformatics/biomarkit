@@ -12,6 +12,42 @@ from text_extraction.database.database import create_database
 from config import LOG_DIR, DOWNLOAD_DIR, REPORT_DIR, DB_CACHE_FILE, SCOPUS_INPUT_CSV
 
 
+def build_new_corpus(name: str, scopus_file: "str | Path") -> Path:
+    """
+    Creates the folder structure for a new corpus and copies the Scopus CSV into it.
+    Delegates folder creation to main.create_corpus.
+
+    Parameters
+    ----------
+    name : str
+        Folder name for the new corpus (no path separators).
+    scopus_file : str | Path
+        Path to the Scopus export CSV to seed the corpus with.
+
+    Returns
+    -------
+    Path
+        Path to the newly created corpus folder.
+    """
+    import shutil
+    from main import create_corpus
+
+    scopus_src = Path(scopus_file)
+    if not scopus_src.exists():
+        raise FileNotFoundError(f"Scopus CSV not found: {scopus_src}")
+
+    corpus_dir = create_corpus(name)
+
+    dest = corpus_dir / "scopus.csv"
+    if not dest.exists():
+        shutil.copy2(scopus_src, dest)
+        logging.info(f"Copied Scopus CSV to {dest}.")
+    else:
+        logging.warning(f"Scopus CSV already exists at {dest} — leaving it untouched.")
+
+    return corpus_dir
+
+
 def setup_logging(level=logging.INFO):
     """
     This function should be called at the beginning of main() to set up logging configuration.
