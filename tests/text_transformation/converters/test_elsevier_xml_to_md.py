@@ -27,7 +27,7 @@ def test_convert_creates_stem_subdirectory(tmp_path):
     result = converter.convert(pub)
 
     stem = xml_path.stem
-    expected = tmp_path / stem / f"{stem}.md"
+    expected = tmp_path / stem / "auto" / f"{stem}_content_list_v2.json"
     assert result == expected
     assert expected.exists()
     assert expected.parent.is_dir()
