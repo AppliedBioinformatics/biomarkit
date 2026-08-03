@@ -356,3 +356,173 @@ def test_convert_all_checks_mineru_once(tmp_path):
         converter.transform_all()
 
     mock_check.assert_called_once()
+
+def test_batching_splits_into_correct_number_of_calls(tmp_path):
+    """7 pubs with batch_size=3 → 3 MinerU calls (chunks of 3, 3, 1)."""
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+
+    pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(7)]
+    converter = MinerUPdfTransformer(publication_list=pubs, batch_size=3)
+    converter.output_dir = tmp_path
+
+    staged_per_call = []
+
+    def fake_run(cmd, **kwargs):
+        staging_dir = Path(cmd[cmd.index("-p") + 1])
+        staged_per_call.append(sorted(p.name for p in staging_dir.iterdir()))
+        for pub in pubs:
+            _make_md(converter, pub)
+        return MagicMock(returncode=0)
+
+    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run) as mock_run, \
+         patch.object(converter, "_cache_result"):
+        converter.transform_all()
+
+    assert mock_run.call_count == 3
+    assert len(staged_per_call[0]) == 3
+    assert len(staged_per_call[1]) == 3
+    assert len(staged_per_call[2]) == 1
+
+
+def test_batching_covers_all_pubs(tmp_path):
+    """Every publication ends up staged across the chunks with no duplicates or omissions."""
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+
+    pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(5)]
+    converter = MinerUPdfTransformer(publication_list=pubs, batch_size=2)
+    converter.output_dir = tmp_path
+
+    all_staged = []
+
+    def fake_run(cmd, **kwargs):
+        staging_dir = Path(cmd[cmd.index("-p") + 1])
+        all_staged.extend(p.name for p in staging_dir.iterdir())
+        for pub in pubs:
+            _make_md(converter, pub)
+        return MagicMock(returncode=0)
+
+    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
+         patch.object(converter, "_cache_result"):
+        converter.transform_all()
+
+    expected = sorted(pub.publication_filepath.name for pub in pubs)
+    assert sorted(all_staged) == expected
+
+
+def test_batching_is_sequential_not_parallel(tmp_path):
+    """Chunks run one at a time — the second call only starts after the first returns."""
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+
+    pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(4)]
+    converter = MinerUPdfTransformer(publication_list=pubs, batch_size=2)
+    converter.output_dir = tmp_path
+
+    call_order = []
+
+    def fake_run(cmd, **kwargs):
+        staging_dir = Path(cmd[cmd.index("-p") + 1])
+        call_order.append(sorted(p.name for p in staging_dir.iterdir()))
+        for pub in pubs:
+            _make_md(converter, pub)
+        return MagicMock(returncode=0)
+
+    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
+         patch.object(converter, "_cache_result"):
+        converter.transform_all()
+
+    # Two distinct calls recorded in order, not simultaneously.
+    assert len(call_order) == 2
+    assert call_order[0] != call_order[1]
+
+
+def test_none_batch_size_sends_all_in_one_call(tmp_path):
+    """batch_size=None bypasses chunking and sends all pending PDFs in one MinerU call."""
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+
+    pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(5)]
+    converter = MinerUPdfTransformer(publication_list=pubs, batch_size=None)
+    converter.output_dir = tmp_path
+
+    def fake_run(cmd, **kwargs):
+        for pub in pubs:
+            _make_md(converter, pub)
+        return MagicMock(returncode=0)
+
+    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run) as mock_run, \
+         patch.object(converter, "_cache_result"):
+        converter.transform_all()
+
+    mock_run.assert_called_once()
+
+
+def test_batch_size_equal_to_pub_count_sends_one_call(tmp_path):
+    """When batch_size == len(pubs) the behaviour is identical to a single unbatched call."""
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+
+    pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(3)]
+    converter = MinerUPdfTransformer(publication_list=pubs, batch_size=3)
+    converter.output_dir = tmp_path
+
+    def fake_run(cmd, **kwargs):
+        for pub in pubs:
+            _make_md(converter, pub)
+        return MagicMock(returncode=0)
+
+    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run) as mock_run, \
+         patch.object(converter, "_cache_result"):
+        converter.transform_all()
+
+    mock_run.assert_called_once()
+
+
+def test_batch_size_larger_than_pub_count_sends_one_call(tmp_path):
+    """batch_size larger than the list still results in a single MinerU call."""
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+
+    pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(2)]
+    converter = MinerUPdfTransformer(publication_list=pubs, batch_size=100)
+    converter.output_dir = tmp_path
+
+    def fake_run(cmd, **kwargs):
+        for pub in pubs:
+            _make_md(converter, pub)
+        return MagicMock(returncode=0)
+
+    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run) as mock_run, \
+         patch.object(converter, "_cache_result"):
+        converter.transform_all()
+
+    mock_run.assert_called_once()
+
+
+def test_already_converted_pubs_excluded_from_batching(tmp_path):
+    """Pubs with existing output on disk are not re-staged in any chunk."""
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+
+    done_pub = _make_pub("10.1000/DONE", tmp_path)
+    new_pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(4)]
+    converter = MinerUPdfTransformer(publication_list=[done_pub] + new_pubs, batch_size=2)
+    converter.output_dir = tmp_path
+    _make_md(converter, done_pub)
+
+    all_staged = []
+
+    def fake_run(cmd, **kwargs):
+        staging_dir = Path(cmd[cmd.index("-p") + 1])
+        all_staged.extend(p.name for p in staging_dir.iterdir())
+        for pub in new_pubs:
+            _make_md(converter, pub)
+        return MagicMock(returncode=0)
+
+    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
+         patch.object(converter, "_cache_result"):
+        converter.transform_all()
+
+    assert done_pub.publication_filepath.name not in all_staged

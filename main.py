@@ -24,7 +24,7 @@ def create_corpus(name: str) -> Path:
     Path - Path to the corpus folder.
     """
     from config import (
-        CORPORA_DIR, DOWNLOAD_DIR, JSON_STRUCT_DIR, FINAL_MARKDOWN_DIR, REPORT_DIR, LOG_DIR,
+        CORPORA_DIR, DOWNLOAD_DIR, JSON_STRUCT_DIR, FINAL_MARKDOWN_DIR, REPORT_DIR, LOG_DIR, SCOPUS_INPUT_CSV_NAME
     )
 
     name = name.strip()
@@ -48,7 +48,7 @@ def create_corpus(name: str) -> Path:
     )
     return corpus_dir
 
-def download_corpus(check_opensource: bool = True) -> list[Publication]:
+def download_corpus(check_opensource: bool = True, generate_report: bool = False) -> list[Publication]:
     """
     Download full-text PDFs and XMLs for all publications in the active corpus's Scopus CSV.
 
@@ -120,7 +120,7 @@ def download_corpus(check_opensource: bool = True) -> list[Publication]:
     all_publications = router.finalise_publication_list(results)
 
     # Build combined text-extraction report.
-    if all_publications:
+    if generate_report:
         build_text_download_report(
             df=df, downloaded_pubs=all_publications, cached_pubs=cached_pubs,
             timings={
@@ -142,6 +142,8 @@ def download_corpus(check_opensource: bool = True) -> list[Publication]:
 def transform_text(
     publications: list[Publication],
     mineru_backend: str = "local-gpu",
+    mineru_batch_size: int | None = None,
+    generate_report: bool = False
 ) -> list[Publication]:
     """
     Convert downloaded PDFs and XMLs into structured JSON content-list files.
@@ -162,6 +164,10 @@ def transform_text(
         "vllm" delegates PDF inference to the remote vLLM server configured via
         MINERU_VLLM_ENDPOINT and MINERU_API_KEY in secrets.env (both are validated
         before the run starts).
+t    mineru_batch_size : int | None, default None (inherits MinerUPdfTransformer default of 25)
+        Number of PDFs to send to MinerU per invocation. None sends all pending
+        PDFs in a single call. Set a positive integer to process in sequential
+        chunks — each completed chunk is cached before the next begins.
 
     Returns
     -------
@@ -190,12 +196,18 @@ def transform_text(
     logging.info(f"Gathered {len(pdfs_to_process)} .PDF files to parse into JSON format.")
 
     ElsevierXmlTransformer(publication_list=xmls_to_process).transform_all()
-    MinerUPdfTransformer(publication_list=pdfs_to_process, mineru_backend=mineru_backend).transform_all()
+    MinerUPdfTransformer(
+        publication_list=pdfs_to_process,
+        mineru_backend=mineru_backend,
+        batch_size=mineru_batch_size,
+    ).transform_all()
 
-    build_conversion_report(
-        newly_converted=controller.needs_transformation,
-        pre_cached=controller.needs_processing + controller.completed,
-    )
+    # Build report if required.
+    if generate_report:
+        build_conversion_report(
+            newly_converted=controller.needs_transformation,
+            pre_cached=controller.needs_processing + controller.completed,
+        )
 
     all_pubs = controller.needs_transformation + controller.needs_processing + controller.completed
     return finalise_transformation(all_pubs)
@@ -292,20 +304,20 @@ if __name__ == "__main__":
     logging.info("Complete a full new corpus conversion.")
 
     # Download.
-    publications = download_corpus(check_opensource=True)
-    logging.info("Corpus download completed.")
+    publications = download_corpus(check_opensource=True, generate_report=True)
+    #logging.info("Corpus download completed.")
 
     # Convert.
-    publications = transform_text(publications, mineru_backend="local-gpu")
-    logging.info("Corpus transformation completed.")
+    #publications = transform_text(publications, mineru_backend="local-gpu")
+    #logging.info("Corpus transformation completed.")
 
     # Standardise.
-    logging.info("Conversion of first paper may take longer due to model weight download.")
-    standardise_text(publications,
-                     keep_latex=True,
-                     keep_tables=True,
-                     keep_figures=False,
-                     keep_references=False,
-                     force_imrad_structure=False)
+    #logging.info("Conversion of first paper may take longer due to model weight download.")
+    #standardise_text(publications,
+    #                 keep_latex=True,
+    #                 keep_tables=True,
+    #                 keep_figures=False,
+    #                 keep_references=False,
+    #                 force_imrad_structure=False)
 
-    logging.info("Corpus standardisation completed.")
+    #logging.info("Corpus standardisation completed.")

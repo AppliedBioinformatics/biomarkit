@@ -27,10 +27,11 @@ class MinerUPdfTransformer(Transformer):
     """
     Converts PDF publications to .md format using the MinerU CLI (OpenDataLab).
 
-    All pending PDFs are converted in a single MinerU invocation so the models
-    are loaded onto the GPU once per run rather than once per PDF. convert()
-    then collects each publication's output; iteration, caching, and error
-    handling are inherited from Converter.
+    All pending PDFs are converted in a single MinerU invocation (or in
+    sequential chunks when batch_size is set) so the models are loaded onto
+    the GPU once per chunk rather than once per PDF. convert() then collects
+    each publication's output; iteration, caching, and error handling are
+    inherited from Converter.
 
     Inference runs locally by default (pipeline backend). With
     mineru_backend="vllm" the CLI acts as a thin client (vlm-http-client
@@ -41,26 +42,47 @@ class MinerUPdfTransformer(Transformer):
     ----------
     output_dir : Path - RAW_MARKDOWN_DIR; MinerU writes <stem>/<parse_dir>/<stem>.md inside here.
     mineru_backend : str - "local-gpu", "local-cpu", or "vllm"; selects the MinerU backend.
+    batch_size : int | None - Number of PDFs per MinerU call. Defaults to 25. None sends all at once.
     """
 
-    def __init__(self, publication_list: List[Publication], mineru_backend: str = "local-gpu"):
+    def __init__(
+        self,
+        publication_list: List[Publication],
+        mineru_backend: str = "local-gpu",
+        batch_size: int | None = 25,
+    ):
         super().__init__(publication_list)
         if mineru_backend not in MINERU_BACKEND_CHOICES:
             raise ValueError(
                 f"Invalid mineru_backend: {mineru_backend!r}. "
                 f"Allowed values: {', '.join(MINERU_BACKEND_CHOICES)}."
             )
+        if batch_size is not None and batch_size < 1:
+            raise ValueError(f"batch_size must be a positive integer, got {batch_size!r}.")
+        
         self.mineru_backend = mineru_backend
+        self.batch_size = batch_size
 
     def transform_all(self) -> None:
         """
-        Overrides base class convert_all() to resolve the MinerU executable and
-        run the single batched MinerU invocation before entering the collection
-        loop, which verifies and caches each publication's output via convert().
+        Overrides base class transform_all() to resolve the MinerU executable
+        and run MinerU in sequential chunks before the collection loop.
+
+        When batch_size is None all pending PDFs are sent in a single call.
+        When batch_size is set the pending list is split into chunks of that
+        size and each chunk is converted sequentially, so completed chunks are
+        already cached on disk if a later chunk fails.
         """
         self._mineru_exe = check_mineru()
         if self.publication_list:
-            self._run_mineru_batch()
+            pending = [pub for pub in self.publication_list if not self._build_output_path(pub).exists()]
+            chunk_size = self.batch_size if self.batch_size is not None else len(pending)
+            chunks = [pending[i:i + chunk_size] for i in range(0, max(len(pending), 1), chunk_size)]
+            total_chunks = len(chunks)
+            for idx, chunk in enumerate(chunks, start=1):
+                if chunk:
+                    logging.info(f"MinerU batch chunk {idx}/{total_chunks} ({len(chunk)} PDF(s)).")
+                    self._run_mineru_batch(chunk)
         super().transform_all()
 
     def _build_batch_command(self, staging_dir: Path) -> list[str]:
@@ -111,38 +133,31 @@ class MinerUPdfTransformer(Transformer):
             env["MINERU_VL_API_KEY"] = MINERU_API_KEY
         return env
 
-    def _run_mineru_batch(self) -> None:
+    def _run_mineru_batch(self, publications: List[Publication]) -> None:
         """
-        Stages all pending PDFs into a temporary directory and converts them
-        with one MinerU CLI call. Passing a directory to -p makes MinerU load
-        its models once and batch pages across documents, instead of paying the
-        model-load cost per PDF.
-
-        Publications whose output .md already exists on disk (e.g. converted by
-        a previous run that was interrupted before the cache was written) are
-        not re-staged; convert() picks their files up and caches them as normal.
+        Stages the given PDFs into a temporary directory and converts them with
+        one MinerU CLI call. Passing a directory to -p makes MinerU load its
+        models once and batch pages across documents.
 
         A non-zero exit is logged but not raised: MinerU may have converted a
-        subset of the batch, and convert() checks each output individually.
+        subset of the batch, and transform2json() checks each output individually.
+
+        Parameters
+        ----------
+        publications : List[Publication] - Publications to stage and convert.
+            Callers are responsible for filtering out already-converted files.
         """
-        pending = [pub for pub in self.publication_list if not self._build_output_path(pub).exists()]
-        recovered = len(self.publication_list) - len(pending)
-        if recovered:
-            logging.info(
-                f"{recovered} publication(s) already have MinerU output on disk — "
-                f"skipping reconversion; they will be cached from the existing files."
-            )
-        if not pending:
+        if not publications:
             return
 
         env = self._build_batch_env()
 
         with tempfile.TemporaryDirectory(prefix="mineru_batch_") as staging:
             staging_dir = Path(staging)
-            for pub in pending:
+            for pub in publications:
                 shutil.copy2(pub.publication_filepath, staging_dir / pub.publication_filepath.name)
 
-            logging.info(f"MinerU batch starting: {len(pending)} PDF(s), endpoint={self.mineru_backend}.")
+            logging.info(f"MinerU batch starting: {len(publications)} PDF(s), endpoint={self.mineru_backend}.")
             result = subprocess.run(
                 self._build_batch_command(staging_dir),
                 capture_output=True,
