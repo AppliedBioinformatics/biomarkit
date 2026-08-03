@@ -304,20 +304,20 @@ if __name__ == "__main__":
     logging.info("Complete a full new corpus conversion.")
 
     # Download.
-    publications = download_corpus(check_opensource=True, generate_report=True)
-    #logging.info("Corpus download completed.")
+    publications = download_corpus(check_opensource=True, generate_report=False)
+    logging.info("Corpus download completed.")
 
     # Convert.
-    #publications = transform_text(publications, mineru_backend="local-gpu")
-    #logging.info("Corpus transformation completed.")
+    publications = transform_text(publications, mineru_backend="local-gpu", mineru_batch_size=25)
+    logging.info("Corpus transformation completed.")
 
     # Standardise.
-    #logging.info("Conversion of first paper may take longer due to model weight download.")
-    #standardise_text(publications,
-    #                 keep_latex=True,
-    #                 keep_tables=True,
-    #                 keep_figures=False,
-    #                 keep_references=False,
-    #                 force_imrad_structure=False)
+    logging.info("Conversion of first paper may take longer due to model weight download.")
+    standardise_text(publications,
+                     keep_latex=True,
+                     keep_tables=True,
+                     keep_figures=False,
+                     keep_references=False,
+                     force_imrad_structure=False)
 
-    #logging.info("Corpus standardisation completed.")
+    logging.info("Corpus standardisation completed.")

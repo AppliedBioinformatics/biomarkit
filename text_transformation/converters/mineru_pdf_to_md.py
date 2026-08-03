@@ -49,7 +49,7 @@ class MinerUPdfTransformer(Transformer):
         self,
         publication_list: List[Publication],
         mineru_backend: str = "local-gpu",
-        batch_size: int | None = 25,
+        batch_size: int = 25,
     ):
         super().__init__(publication_list)
         if mineru_backend not in MINERU_BACKEND_CHOICES:

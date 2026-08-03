@@ -34,13 +34,17 @@ def prepare_bulk_transformation(mineru_backend: str = "local-gpu") -> None:
 
     if mineru_backend == "vllm":
         check_vllm_config()
+
         if not check_gpu():
             logging.warning(
                 "No local GPU recognised — proceeding anyway as MinerU inference "
                 "is delegated to the remote vLLM endpoint."
             )
-    elif mineru_backend == "local-gpu" and not check_gpu():
-        raise RuntimeError("No GPU recognised by PyTorch. Cannot proceed.")
+
+    elif mineru_backend == "local-gpu":
+        if not check_gpu():
+            raise RuntimeError("No GPU recognised by PyTorch. Cannot proceed.")
+
     elif mineru_backend == "local-cpu":
         logging.info("CPU mode selected — skipping GPU check.")
     check_mineru()
