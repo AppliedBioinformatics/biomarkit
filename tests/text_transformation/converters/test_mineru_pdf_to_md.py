@@ -26,10 +26,10 @@ FAKE_MINERU = Path("/fake/mineru.exe")
 # ---------------------------------------------------------------------------
 
 def test_init_sets_output_dir_to_raw_markdown_dir():
-    from config import RAW_MARKDOWN_DIR
+    from config import JSON_STRUCT_DIR
     from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
     converter = MinerUPdfConverter(publication_list=[])
-    assert converter.output_dir == RAW_MARKDOWN_DIR
+    assert converter.output_dir == JSON_STRUCT_DIR
 
 
 def test_init_defaults_to_local_endpoint():
