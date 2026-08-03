@@ -3,8 +3,8 @@ from pathlib import Path
 from typing import List
 
 import config
-from text_extraction.basemodels.publication import Publication
-from text_extraction.database.database import create_database, get_row_for_doi
+from text_download.basemodels.publication import Publication
+from text_download.database.database import create_database, get_row_for_doi
 
 
 class Controller:
@@ -21,11 +21,11 @@ class Controller:
         logging.info("Attempting to instantiate text_transformation Controller.")
 
         self.publications = publication_list
-        self.cache = config.DB_CACHE_FILE
+        self.cache = config.DB_CACHE_FILE_NAME
 
-        self.needs_conversion: List[Publication] = []
+        self.needs_transformation: List[Publication] = []
         self.needs_processing: List[Publication] = []
-        self.fully_processed: List[Publication] = []
+        self.completed: List[Publication] = []
 
         self._check_cache()
         logging.info("Successfully instantiated text_transformation Controller.")
@@ -100,16 +100,16 @@ class Controller:
                 )
                 continue
             if pub.is_processed:
-                self.fully_processed.append(pub)
+                self.completed.append(pub)
             elif pub.is_converted:
                 self.needs_processing.append(pub)
             else:
-                self.needs_conversion.append(pub)
+                self.needs_transformation.append(pub)
 
         logging.info(
-            f"Sort complete — needs_conversion: {len(self.needs_conversion)}, "
+            f"Sort complete — needs_conversion: {len(self.needs_transformation)}, "
             f"needs_processing: {len(self.needs_processing)}, "
-            f"fully_processed: {len(self.fully_processed)}."
+            f"fully_processed: {len(self.completed)}."
         )
 
     def prepare_publications(self) -> None:

@@ -2,7 +2,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 import plotly.graph_objects as go
-from text_extraction.basemodels.publication import Publication
+from text_download.basemodels.publication import Publication
 
 
 def _make_pub(doi: str, tmp_path: Path, doc_type: str = "PDF",

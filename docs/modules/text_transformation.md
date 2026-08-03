@@ -46,9 +46,9 @@ Call `transform_text()` from `main.py` after `extract_text()` has completed. The
 of `Publication` objects.
 
 ```python
-from main import extract_text, transform_text
+from main import download_corpus, transform_text
 
-publications = extract_text()
+publications = download_corpus()
 publications = transform_text(publications)
 ```
 

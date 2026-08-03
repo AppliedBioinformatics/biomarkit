@@ -2,7 +2,7 @@ import logging
 import shutil
 import sqlite3
 from pathlib import Path
-from config import JSON_STRUCT_DIR, FINAL_MARKDOWN_DIR, BASE_DIR, DB_CACHE_FILE
+from config import JSON_STRUCT_DIR, FINAL_MARKDOWN_DIR, BASE_DIR, DB_CACHE_FILE_NAME
 
 MINERU_ENDPOINT_CHOICES = ("local", "vllm")
 
@@ -129,7 +129,7 @@ def check_cache_for_markdowns() -> None:
     """
     Checks the cache to see if any publications have already been processed. Controller will handle splitting of
     files this function just checks whether any are present and updates the log."""
-    with sqlite3.connect(DB_CACHE_FILE) as conn:
+    with sqlite3.connect(DB_CACHE_FILE_NAME) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM cache")
         total = cursor.fetchone()[0]

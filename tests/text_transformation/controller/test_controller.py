@@ -3,8 +3,8 @@ import pytest
 import os
 from pathlib import Path
 from config import TMP_DIR
-from text_extraction.basemodels.publication import Publication
-from text_extraction.database.database import create_database, insert_row
+from text_download.basemodels.publication import Publication
+from text_download.database.database import create_database, insert_row
 
 TMP_DB = TMP_DIR / "tests_tmp" / "test_tt_controller.sqlite"
 
@@ -270,9 +270,9 @@ def test_sort_puts_publications_in_correct_lists(mixed_publications):
     controller = Controller(publication_list=[pub_a, pub_b, pub_c])
     controller._sort_publications()
 
-    assert pub_a in controller.fully_processed
+    assert pub_a in controller.completed
     assert pub_b in controller.needs_processing
-    assert pub_c in controller.needs_conversion
+    assert pub_c in controller.needs_transformation
 
 
 def test_sort_uncached_publication_is_skipped(mixed_publications):
@@ -282,9 +282,9 @@ def test_sort_uncached_publication_is_skipped(mixed_publications):
     controller = Controller(publication_list=[pub_d])
     controller._sort_publications()
 
-    assert pub_d not in controller.fully_processed
+    assert pub_d not in controller.completed
     assert pub_d not in controller.needs_processing
-    assert pub_d not in controller.needs_conversion
+    assert pub_d not in controller.needs_transformation
 
 
 # ---------------------------------------------------------------------------
@@ -328,7 +328,7 @@ def test_prepare_publications_full_pipeline(tmp_path):
     controller.prepare_publications()
 
     assert len(controller.needs_processing) == 1
-    assert len(controller.needs_conversion) == 1
-    assert len(controller.fully_processed) == 0
+    assert len(controller.needs_transformation) == 1
+    assert len(controller.completed) == 0
     # Uncached publication must have been discarded.
     assert all(p.doi != "10.1037/int3" for p in controller.publications)

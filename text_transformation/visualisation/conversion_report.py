@@ -11,8 +11,8 @@ import plotly.graph_objects as go
 import plotly.io as pio
 
 from config import REPORT_DIR
-from text_extraction.basemodels.publication import Publication
-from text_extraction.utils.generics import build_plotly_report
+from text_download.basemodels.publication import Publication
+from text_download.utils.generics import build_plotly_report
 
 pio.templates.default = "plotly_white"
 

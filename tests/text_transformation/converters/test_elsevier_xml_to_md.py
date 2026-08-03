@@ -1,6 +1,6 @@
 from pathlib import Path
-from text_extraction.basemodels.publication import Publication
-from text_transformation.converters.elsevier_xml_to_md import ElsevierXmlConverter
+from text_download.basemodels.publication import Publication
+from text_transformation.converters.elsevier_xml_to_md import ElsevierXmlTransformer
 
 _MINIMAL_XML = """<?xml version="1.0"?>
 <full-text-retrieval-response xmlns="http://www.elsevier.com/xml/svapi/article/dtd">
@@ -21,10 +21,10 @@ def test_convert_creates_stem_subdirectory(tmp_path):
         publication_filepath=xml_path,
     )
 
-    converter = ElsevierXmlConverter(publication_list=[pub])
+    converter = ElsevierXmlTransformer(publication_list=[pub])
     converter.output_dir = tmp_path
 
-    result = converter.convert(pub)
+    result = converter.transform2json(pub)
 
     stem = xml_path.stem
     expected = tmp_path / stem / "auto" / f"{stem}_content_list_v2.json"

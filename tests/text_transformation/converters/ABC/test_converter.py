@@ -3,8 +3,8 @@ import pytest
 import os
 from pathlib import Path
 from config import TMP_DIR
-from text_extraction.basemodels.publication import Publication
-from text_extraction.database.database import create_database, get_row_for_doi
+from text_download.basemodels.publication import Publication
+from text_download.database.database import create_database, get_row_for_doi
 
 TMP_DB = TMP_DIR / "tests_tmp" / "test_converter.sqlite"
 
@@ -48,13 +48,13 @@ def _make_pub(doi: str, tmp_path: Path) -> Publication:
 
 def _make_converter_class(convert_fn):
     """
-    Returns a concrete Converter subclass whose convert() delegates to convert_fn.
-    Allows different convert() behaviours per test without boilerplate.
+    Returns a concrete Transformer subclass whose transform2json() delegates to convert_fn.
+    Allows different transform2json() behaviours per test without boilerplate.
     """
-    from text_transformation.converters.ABC.converter import Converter
+    from text_transformation.converters.ABC.transformer import Transformer
 
-    class _TestConverter(Converter):
-        def convert(self, pub):
+    class _TestConverter(Transformer):
+        def transform2json(self, pub):
             return convert_fn(pub)
 
     return _TestConverter
@@ -105,7 +105,7 @@ def test_cache_result_writes_content_json_filepath_to_db(tmp_path):
 
     pub.content_json_filepath = raw_md
 
-    from text_transformation.converters.ABC.converter import Converter
+    from text_transformation.converters.ABC.transformer import Transformer
     cls = _make_converter_class(lambda p: None)
     converter = cls(publication_list=[pub])
     converter.cache = TMP_DB
@@ -142,7 +142,7 @@ def test_convert_all_success(tmp_path):
     cls = _make_converter_class(convert_fn)
     converter = cls(publication_list=pubs)
     converter.cache = TMP_DB
-    converter.convert_all()
+    converter.transform_all()
 
     for pub, expected_file in zip(pubs, output_files):
         assert pub.content_json_filepath == expected_file
@@ -174,7 +174,7 @@ def test_convert_all_skips_on_none_return(tmp_path):
     cls = _make_converter_class(convert_fn)
     converter = cls(publication_list=[pub_fail, pub_ok])
     converter.cache = TMP_DB
-    converter.convert_all()
+    converter.transform_all()
 
     assert pub_fail.content_json_filepath is None
     assert pub_ok.content_json_filepath == out_file
@@ -209,7 +209,7 @@ def test_convert_all_skips_on_exception(tmp_path):
     cls = _make_converter_class(convert_fn)
     converter = cls(publication_list=[pub_err, pub_ok])
     converter.cache = TMP_DB
-    converter.convert_all()
+    converter.transform_all()
 
     assert pub_err.content_json_filepath is None
     assert pub_ok.content_json_filepath == out_file

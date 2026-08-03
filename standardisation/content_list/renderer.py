@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from standardisation.content_list.schema import (
+    ChartBlock,
     ContentBlock,
+    ImageBlock,
     InlineEquation,
     ListBlock,
     ParagraphBlock,
@@ -41,6 +45,34 @@ def _render_table(block: TableBlock) -> str:
     return "\n\n".join(parts) if parts else ""
 
 
+def _resolve_image_path(raw: str, images_dir: Path | None) -> str:
+    if not raw:
+        return ""
+    if images_dir is not None:
+        return (images_dir / raw).as_posix()
+    return raw
+
+
+def _render_image(block: ImageBlock, images_dir: Path | None) -> str:
+    caption = _render_spans(block.content.image_caption)
+    raw = block.content.image_source.path if block.content.image_source else ""
+    path = _resolve_image_path(raw, images_dir)
+    parts = [f"![{caption}]({path})"]
+    if caption:
+        parts.append(f"*{caption}*")
+    return "\n\n".join(parts)
+
+
+def _render_chart(block: ChartBlock, images_dir: Path | None) -> str:
+    caption = _render_spans(block.content.chart_caption)
+    raw = block.content.image_source.path if block.content.image_source else ""
+    path = _resolve_image_path(raw, images_dir)
+    parts = [f"![{caption}]({path})"]
+    if caption:
+        parts.append(f"*{caption}*")
+    return "\n\n".join(parts)
+
+
 def _render_list(block: ListBlock) -> str:
     lines = []
     ordered = block.content.attribute == "ordered"
@@ -51,8 +83,19 @@ def _render_list(block: ListBlock) -> str:
     return "\n".join(lines)
 
 
-def render(blocks: list[ContentBlock]) -> str:
-    """Convert a filtered list of content blocks to a markdown string."""
+def render(blocks: list[ContentBlock], images_dir: Path | None = None) -> str:
+    """Convert a filtered list of content blocks to a markdown string.
+
+    Parameters
+    ----------
+    blocks : list[ContentBlock]
+        Filtered content blocks to render.
+    images_dir : Path, optional
+        Directory that image paths in the content-list are relative to (the
+        ``auto/`` folder MinerU writes into). When provided, image paths are
+        resolved to absolute so the output markdown works regardless of where
+        the final .md file is saved.
+    """
     parts = []
     for block in blocks:
         if isinstance(block, TitleBlock):
@@ -65,6 +108,10 @@ def render(blocks: list[ContentBlock]) -> str:
             text = _render_table(block)
             if text:
                 parts.append(text)
+        elif isinstance(block, ImageBlock):
+            parts.append(_render_image(block, images_dir))
+        elif isinstance(block, ChartBlock):
+            parts.append(_render_chart(block, images_dir))
         elif isinstance(block, ListBlock):
             parts.append(_render_list(block))
 

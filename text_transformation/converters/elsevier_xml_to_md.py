@@ -19,8 +19,8 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from text_extraction.basemodels.publication import Publication
-from text_transformation.converters.ABC.converter import Converter
+from text_download.basemodels.publication import Publication
+from text_transformation.converters.ABC.transformer import Transformer
 
 
 # ---------------------------------------------------------------------------
@@ -1155,13 +1155,13 @@ def parse_elsevier_xml_to_blocks(xml_path: str) -> list:
 # Converter class
 # ---------------------------------------------------------------------------
 
-class ElsevierXmlConverter(Converter):
+class ElsevierXmlTransformer(Transformer):
     """
     Converts Elsevier full-text XML publications to content_list_v2.json format.
     Inherits iteration, caching, and error handling from Converter.
     """
 
-    def convert(self, pub: Publication) -> Path | None:
+    def transform2json(self, pub: Publication) -> Path | None:
         """
         Parses a single Elsevier XML file and writes a content_list_v2.json to
         RAW_MARKDOWN_DIR/<stem>/auto/<stem>_content_list_v2.json.

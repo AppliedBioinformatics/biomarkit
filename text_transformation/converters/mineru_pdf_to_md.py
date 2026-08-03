@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import List
 
 from config import MINERU_VIRTUAL_VRAM_SIZE, MINERU_VLLM_ENDPOINT, MINERU_API_KEY
-from text_extraction.basemodels.publication import Publication
-from text_transformation.converters.ABC.converter import Converter
+from text_download.basemodels.publication import Publication
+from text_transformation.converters.ABC.transformer import Transformer
 from text_transformation.utils.generics import check_mineru, MINERU_ENDPOINT_CHOICES
 
 # OCR language passed to MinerU via -l. The CLI defaults to Chinese ("ch").
@@ -23,7 +23,7 @@ MINERU_OCR_LANG = "en"
 MINERU_PARSE_DIR = {"local": "auto", "vllm": "vlm"}
 
 
-class MinerUPdfConverter(Converter):
+class MinerUPdfTransformer(Transformer):
     """
     Converts PDF publications to .md format using the MinerU CLI (OpenDataLab).
 
@@ -52,7 +52,7 @@ class MinerUPdfConverter(Converter):
             )
         self.mineru_endpoint = mineru_endpoint
 
-    def convert_all(self) -> None:
+    def transform_all(self) -> None:
         """
         Overrides base class convert_all() to resolve the MinerU executable and
         run the single batched MinerU invocation before entering the collection
@@ -61,7 +61,7 @@ class MinerUPdfConverter(Converter):
         self._mineru_exe = check_mineru()
         if self.publication_list:
             self._run_mineru_batch()
-        super().convert_all()
+        super().transform_all()
 
     def _build_batch_command(self, staging_dir: Path) -> list[str]:
         """
@@ -174,7 +174,7 @@ class MinerUPdfConverter(Converter):
         stem = pub.publication_filepath.stem
         return self.output_dir / stem / MINERU_PARSE_DIR[self.mineru_endpoint] / f"{stem}_content_list_v2.json"
 
-    def convert(self, pub: Publication) -> Path | None:
+    def transform2json(self, pub: Publication) -> Path | None:
         """
         Collects the content_list_v2.json produced for one publication by the batched
         MinerU run in convert_all().

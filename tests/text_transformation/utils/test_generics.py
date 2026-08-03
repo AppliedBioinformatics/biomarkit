@@ -264,7 +264,7 @@ def _make_test_db(rows: list[dict]) -> None:
         )
 
 
-@patch("text_transformation.utils.generics.DB_CACHE_FILE", TMP_TEST_DB)
+@patch("text_transformation.utils.generics.DB_CACHE_FILE_NAME", TMP_TEST_DB)
 def test_check_cache_for_markdowns_empty_db(caplog):
     """Logs correct counts when the cache is empty."""
     from text_transformation.utils.generics import check_cache_for_markdowns
@@ -279,7 +279,7 @@ def test_check_cache_for_markdowns_empty_db(caplog):
     assert "0 with final markdown" in caplog.text
 
 @pytest.mark.skipif(os.name == 'nt', reason="Permission issues on Windows")
-@patch("text_transformation.utils.generics.DB_CACHE_FILE", TMP_TEST_DB)
+@patch("text_transformation.utils.generics.DB_CACHE_FILE_NAME", TMP_TEST_DB)
 def test_check_cache_for_markdowns_mixed(caplog):
     """Logs correct counts for a mix of processed and unprocessed publications."""
     from text_transformation.utils.generics import check_cache_for_markdowns
@@ -302,7 +302,7 @@ def test_check_cache_for_markdowns_mixed(caplog):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Does not run on Windows")
-@patch("text_transformation.utils.generics.DB_CACHE_FILE", TMP_TEST_DB)
+@patch("text_transformation.utils.generics.DB_CACHE_FILE_NAME", TMP_TEST_DB)
 def test_check_cache_for_markdowns_returns_none():
     """Function returns None (log-only, no return value)."""
     from text_transformation.utils.generics import check_cache_for_markdowns

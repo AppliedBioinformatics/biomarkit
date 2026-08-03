@@ -5,23 +5,22 @@ from os import getenv
 # Don't touch this.
 BASE_DIR = Path(__file__).resolve().parent
 
-# Corpus selection - Most likely to be updated by user. Each corpus lives in its own
-# subfolder of corpora/ and holds its own inputs, outputs, cache, reports and logs.
-CORPUS_NAME = "luca"
-
 # Filepath for secrets.env
 SECRETS_FILE = BASE_DIR / "secrets.env"
 
 # Load secrets before reading any values.
 load_dotenv(dotenv_path=SECRETS_FILE)
 
+# Corpus selection — set CORPUS_NAME in secrets.env to choose the active corpus.
+CORPUS_NAME = getenv("CORPUS_NAME", "default")
+
 # Corpus folder layout.
 CORPORA_DIR = BASE_DIR / "corpora"
 CORPUS_DIR = CORPORA_DIR / CORPUS_NAME
-SCOPUS_INPUT_CSV = CORPUS_DIR / "scopus.csv"
-DB_CACHE_FILE = CORPUS_DIR / "sqlite.db"
+SCOPUS_INPUT_CSV_NAME = CORPUS_DIR / "scopus.csv"
+DB_CACHE_FILE_NAME = CORPUS_DIR / "sqlite.db"
 DOWNLOAD_DIR = CORPUS_DIR / "manuscripts"
-JSON_STRUCT_DIR = CORPUS_DIR / "markdowns"
+JSON_STRUCT_DIR = CORPUS_DIR / "intermediates"
 FINAL_MARKDOWN_DIR = CORPUS_DIR / "results"
 REPORT_DIR = CORPUS_DIR / "reports"
 LOG_DIR = CORPUS_DIR / "logs"

@@ -1,16 +1,15 @@
 from __future__ import annotations
-from typing import Dict
 import logging
 from time import perf_counter
 from pathlib import Path
-from config import SCOPUS_INPUT_CSV, DB_CACHE_FILE
-from text_extraction.filter import filter_scopus_csv as ftr
-from text_extraction.utils.generics import setup_logging, setup_run, clean_publications
-from text_extraction.controller.controller import Controller
-from text_extraction.apis.router import ApiRouter
-from text_extraction.visualisation.text_extraction_report import build_text_extraction_report
-from text_extraction.basemodels.publication import Publication
-from text_extraction.visualisation.text_extraction_report import build_text_extraction_report
+from config import SCOPUS_INPUT_CSV_NAME, DB_CACHE_FILE_NAME
+from text_download.filter import filter_scopus_csv as ftr
+from text_download.utils.generics import setup_logging, setup_run, clean_publications
+from text_download.controller.controller import Controller
+from text_download.apis.router import ApiRouter
+from text_download.basemodels.publication import Publication
+from text_download.visualisation.text_extraction_report import build_text_download_report
+from text_download.utils.generics import build_new_corpus
 
 # High-level functions.
 def create_corpus(name: str) -> Path:
@@ -51,16 +50,32 @@ def create_corpus(name: str) -> Path:
 
     logging.info(
         f"Corpus '{name}' ready at {corpus_dir}. Place your Scopus export there as "
-        f"'{SCOPUS_INPUT_CSV.name}' and set CORPUS_NAME = \"{name}\" in config.py to use it."
+        f"'{SCOPUS_INPUT_CSV_NAME.name}' and set CORPUS_NAME = \"{name}\" in config.py to use it."
     )
     return corpus_dir
 
-def extract_text(check_opensource: bool = True, scopus_report: bool = False) -> list[Publication]:
+def download_corpus(check_opensource: bool = True) -> list[Publication]:
     """
-    Main function for downloading all academic publications from the results of a scopus query. Returns a list of
-    standardized 'publication' objects. Each object contains metadata for the publication, as well as the filepath
-    at which the full-text PDF/XML is located. Set scopus_report=True to include the Scopus input summary charts
-    in the text-extraction report.
+    Download full-text PDFs and XMLs for all publications in the active corpus's Scopus CSV.
+
+    Each DOI is routed through a two-stage process: open-access routes (arXiv, bioRxiv,
+    ChemRxiv, Unpaywall) are tried first when check_opensource=True, then publisher APIs
+    (Elsevier, Wiley, Springer, MDPI, Frontiers, etc.) handle the remainder. Previously
+    downloaded publications are loaded from the SQLite cache and download for these is not
+    attempted. An HTML report is always written to the corpus reports folder on completion.
+
+    Parameters
+    ----------
+    check_opensource : bool, default True
+        When True, attempt open-access routes before falling back to publisher APIs.
+        Set to False to skip directly to publisher specific APIs.
+
+    Returns
+    -------
+    list[Publication]
+        All publications from the Scopus CSV, including those loaded from cache.
+        Each object carries DOI, title, publisher, year, document type, and the
+        filepath of the downloaded PDF or XML (None if download failed).
     """
 
     # Start timing the whole function.
@@ -72,7 +87,7 @@ def extract_text(check_opensource: bool = True, scopus_report: bool = False) -> 
     clean_publications()
 
     # Load input query and filter.
-    raw_df = ftr.load_scopus_csv(SCOPUS_INPUT_CSV)
+    raw_df = ftr.load_scopus_csv(SCOPUS_INPUT_CSV_NAME)
 
     # Filter + Synchronize. (Can add more steps here)
     df = ftr.remove_imperfect_rows(df=raw_df)
@@ -105,9 +120,8 @@ def extract_text(check_opensource: bool = True, scopus_report: bool = False) -> 
 
     # Build combined text-extraction report.
     if all_publications:
-        build_text_extraction_report(
+        build_text_download_report(
             df=df, downloaded_pubs=all_publications, cached_pubs=cached_pubs,
-            scopus_report=scopus_report,
             timings={
                 "opensource": opensource_seconds,
                 "other_apis": other_apis_seconds,
@@ -126,79 +140,119 @@ def extract_text(check_opensource: bool = True, scopus_report: bool = False) -> 
 
 def transform_text(
     publications: list[Publication],
-    skip_conversion: bool = False,
     mineru_endpoint: str = "local",
 ) -> list[Publication]:
     """
-    Converts downloaded publications (PDF/XML) into raw markdown files. Set
-    mineru_endpoint="vllm" to delegate MinerU PDF inference to the remote vLLM server
-    configured via MINERU_VLLM_ENDPOINT and MINERU_API_KEY in secrets.env (both are
-    checked before the run starts); the default "local" runs MinerU on the local GPU.
+    Convert downloaded PDFs and XMLs into structured JSON content-list files.
+
+    Elsevier XMLs are parsed directly; all other PDFs are processed via MinerU.
+    Publications whose JSON output already exists on disk are skipped and passed
+    through unchanged. An HTML conversion report is always written to the corpus
+    reports folder on completion.
+
+    Parameters
+    ----------
+    publications : list[Publication]
+        Output of download_corpus(). Publications without a local file
+        (publication_filepath is None) are silently skipped.
+    mineru_endpoint : {"local", "vllm"}, default "local"
+        "local" runs MinerU on the local GPU.
+        "vllm" delegates PDF inference to the remote vLLM server configured via
+        MINERU_VLLM_ENDPOINT and MINERU_API_KEY in secrets.env (both are validated
+        before the run starts).
+
+    Returns
+    -------
+    list[Publication]
+        All input publications, including those already cached from a previous run.
+        Each object has content_json_filepath set if conversion succeeded.
     """
 
     from text_transformation.utils.generics import prepare_bulk_transformation, finalise_transformation
     from text_transformation.controller.controller import Controller
-    from text_transformation.converters.elsevier_xml_to_md import ElsevierXmlConverter
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
+    from text_transformation.converters.elsevier_xml_to_md import ElsevierXmlTransformer
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
     from text_transformation.visualisation.conversion_report import build_conversion_report
 
     # Pre-transformation checks (affirms vLLM secrets are filled when mineru_endpoint="vllm").
     prepare_bulk_transformation(mineru_endpoint=mineru_endpoint)
 
-    # Send publications to text transformation controller to categorize them for processing based on cached state,
+    # Send publications to text transformation controller to categorize them for processing based on cached state.
     controller = Controller(publication_list=publications)
     controller.prepare_publications()
 
-    if skip_conversion:
-        logging.info(
-            f"skip_conversion=True — skipping {len(controller.needs_conversion)} unconverted publication(s), "
-            f"proceeding with {len(controller.needs_processing) + len(controller.fully_processed)} cached."
-        )
-    else:
-        # Build raw Markdown files for publications that require conversion.
-        xmls_to_process = [pub for pub in controller.needs_conversion if pub.document_type == "XML"]
-        pdfs_to_process = [pub for pub in controller.needs_conversion if pub.document_type == "PDF"]
-        logging.info(f"Gathered {len(xmls_to_process)} .XML files to parse into markdown format.")
-        logging.info(f"Gathered {len(pdfs_to_process)} .PDF files to parse into markdown format.")
+    # Build JSON structure files for each publication if they have not already been generated by a previous run.
+    xmls_to_process = [pub for pub in controller.needs_transformation if pub.document_type == "XML"]
+    pdfs_to_process = [pub for pub in controller.needs_transformation if pub.document_type == "PDF"]
+    logging.info(f"Gathered {len(xmls_to_process)} .XML files to parse into JSON format.")
+    logging.info(f"Gathered {len(pdfs_to_process)} .PDF files to parse into JSON format.")
 
-        # Convert to raw md.
-        ElsevierXmlConverter(publication_list=xmls_to_process).convert_all()
-        MinerUPdfConverter(publication_list=pdfs_to_process, mineru_endpoint=mineru_endpoint).convert_all()
+    ElsevierXmlTransformer(publication_list=xmls_to_process).transform_all()
+    MinerUPdfTransformer(publication_list=pdfs_to_process, mineru_endpoint=mineru_endpoint).transform_all()
 
-    # Build conversion report.
     build_conversion_report(
-        newly_converted=[] if skip_conversion else controller.needs_conversion,
-        pre_cached=controller.needs_processing + controller.fully_processed,
+        newly_converted=controller.needs_transformation,
+        pre_cached=controller.needs_processing + controller.completed,
     )
 
-    # Validate and return publications for downstream standardisation.
-    if skip_conversion:
-        all_pubs = controller.needs_processing + controller.fully_processed
-    else:
-        all_pubs = controller.needs_conversion + controller.needs_processing + controller.fully_processed
+    all_pubs = controller.needs_transformation + controller.needs_processing + controller.completed
     return finalise_transformation(all_pubs)
 
-def standardise_text(publications: list[Publication],
-                     keep_figures: bool = False,
-                     keep_tables: bool = False,
-                     keep_latex: bool = False,
-                     keep_references: bool = False,
-                     force_imrad_structure = True) -> list[Publication]:
+def standardise_text(
+    publications: list[Publication],
+    keep_figures: bool = False,
+    keep_tables: bool = False,
+    keep_latex: bool = False,
+    keep_references: bool = False,
+    force_imrad_structure: bool = True,
+) -> list[Publication]:
     """
-    Cleans and standardizes raw markdown file outputs from text_transformation() into a final standardised markdown
-    format that can be customised by the user through the context parameter. Returns the publications that were
-    successfully standardized (final_md_filepath set in the cache).
+    Clean and standardise JSON content-list files into final Markdown outputs.
+
+    Reads each publication's content_json_filepath, applies content filters
+    (figures, tables, LaTeX, references), optionally enforces IMRAD section
+    structure via an Ollama LLM, and writes the result to the corpus results
+    folder. Publications without a content_json_filepath are skipped.
+
+    Requires a running Ollama instance when force_imrad_structure=True. The
+    function raises at the start if the endpoint is unreachable.
+
+    Parameters
+    ----------
+    publications : list[Publication]
+        Output of transform_text(). Publications without content_json_filepath
+        set are silently skipped.
+    keep_figures : bool, default False
+        When False, image and chart blocks are replaced with a placeholder.
+    keep_tables : bool, default False
+        When False, table blocks are replaced with a placeholder.
+    keep_latex : bool, default False
+        When False, inline and block equations are replaced with a placeholder.
+    keep_references : bool, default False
+        When False, the references section and everything after it is removed.
+    force_imrad_structure : bool, default True
+        When True, section headings are normalised to Introduction / Methods /
+        Results / Discussion using regex matching with an LLM fallback.
+
+    Returns
+    -------
+    list[Publication]
+        All input publications that had a content_json_filepath. Successfully
+        standardised publications have final_md_filepath set; others have it as None.
     """
 
     from standardisation.generics import prepare_standardisation
     from standardisation.text_cleaning.cleaner import Cleaner
 
-    # Pre-flight: check the LLM fallback endpoint. The run continues without it.
     llm_available = prepare_standardisation()
-
-    # Raise a runtime error to inform the user that the ollama endpoint is not accessible.
-    if not llm_available:
-        raise RuntimeError("LLM fallback endpoint is not available. Cannot proceed.")
+ 
+    if not llm_available and force_imrad_structure:
+        raise RuntimeError(
+            "Ollama endpoint is not reachable or the configured model is not installed. "
+            "The LLM is required for force_imrad_structure=True to classify headings that "
+            "regex cannot match. Start Ollama and ensure the model is pulled, or set "
+            "force_imrad_structure=False to use regex-only heading detection."
+        )
 
     logging.info("Preflight checks passed. Proceeding with standardisation.")
 
@@ -216,15 +270,14 @@ def standardise_text(publications: list[Publication],
     # Instantiate the Cleaner class and clean the publications according to the params defined by the user.
     cleaner = Cleaner(
         publications=publications,
-        cache=DB_CACHE_FILE,
+        cache=DB_CACHE_FILE_NAME,
         context=context
     )
     cleaner.clean_all()
 
-    # Get total number of cleaned publications.
     standardised = [p for p in publications if p.final_md_filepath is not None]
     logging.info(f"standardise_text: {len(standardised)}/{len(publications)} publications standardised.")
-    return standardised
+    return publications
 
 
 if __name__ == "__main__":
@@ -232,19 +285,21 @@ if __name__ == "__main__":
     setup_logging(level=logging.INFO)
     logging.info("Complete a full new corpus conversion.")
 
-    # Make new corpus.
-    from text_extraction.utils.generics import build_new_corpus
-    build_new_corpus(name="my_corpus", scopus_file="path/to/scopus.csv")
-
     # Download.
-    publications = extract_text(check_opensource=True, scopus_report=True)
+    publications = download_corpus(check_opensource=True)
     logging.info("Corpus download completed.")
 
     # Convert.
-    publications = transform_text(publications, skip_conversion=False)
+    publications = transform_text(publications)
     logging.info("Corpus transformation completed.")
 
     # Standardise.
     logging.info("Conversion of first paper may take longer due to model weight download.")
-    standardise_text(publications, keep_latex=False, keep_tables=False, force_imrad_structure=True)
+    standardise_text(publications,
+                     keep_latex=True,
+                     keep_tables=True,
+                     keep_figures=False,
+                     keep_references=False,
+                     force_imrad_structure=False)
+
     logging.info("Corpus standardisation completed.")

@@ -1,9 +1,10 @@
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from text_extraction.basemodels.publication import Publication
+from text_download.basemodels.publication import Publication
 from standardisation.content_list.schema import (
     Document, TitleBlock, TitleContent, TextSpan, ParagraphBlock,
 )
@@ -17,7 +18,7 @@ from standardisation.content_list.filters import (
 from standardisation.content_list.renderer import render
 from standardisation.llms.llm_classifier import LlamaClassifier
 from config import FINAL_MARKDOWN_DIR
-from text_extraction.database.database import update_final_md_filepath
+from text_download.database.database import update_final_md_filepath
 
 # Strips leading section numbering (e.g. "1.", "II.", "§3") before matching heading text.
 _SECTION_PREFIX_RE = re.compile(r'^[\d\s.\-–—\xa7IVXivx]+')
@@ -308,11 +309,16 @@ class Cleaner:
         if self.force_imrad_structure:
             blocks = self._build_imrad_structure(blocks)
 
-        # Render final markdown from the blocks, save it and update cache accordingly.
-        markdown = render(blocks)
         stem = Path(pub.publication_filepath).stem
         FINAL_MARKDOWN_DIR.mkdir(parents=True, exist_ok=True)
         output_path = FINAL_MARKDOWN_DIR / f"{stem}.md"
+
+        # Compute relative path from the output .md to the auto/ images folder
+        # so image links work in any markdown renderer without absolute paths.
+        images_dir = Path(os.path.relpath(json_path.parent, output_path.parent))
+
+        # Render final markdown from the blocks, save it and update cache accordingly.
+        markdown = render(blocks, images_dir=images_dir)
         output_path.write_text(markdown, encoding="utf-8")
 
         # Add to cache.

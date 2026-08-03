@@ -1,6 +1,6 @@
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from text_extraction.basemodels.publication import Publication
+from text_download.basemodels.publication import Publication
 
 
 def _make_pub(doi: str, tmp_path: Path) -> Publication:
@@ -27,22 +27,22 @@ FAKE_MINERU = Path("/fake/mineru.exe")
 
 def test_init_sets_output_dir_to_raw_markdown_dir():
     from config import JSON_STRUCT_DIR
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
-    converter = MinerUPdfConverter(publication_list=[])
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    converter = MinerUPdfTransformer(publication_list=[])
     assert converter.output_dir == JSON_STRUCT_DIR
 
 
 def test_init_defaults_to_local_endpoint():
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
-    converter = MinerUPdfConverter(publication_list=[])
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    converter = MinerUPdfTransformer(publication_list=[])
     assert converter.mineru_endpoint == "local"
 
 
 def test_init_rejects_unknown_endpoint():
     import pytest
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
     with pytest.raises(ValueError, match="Invalid mineru_endpoint"):
-        MinerUPdfConverter(publication_list=[], mineru_endpoint="remote")
+        MinerUPdfTransformer(publication_list=[], mineru_endpoint="remote")
 
 
 # ---------------------------------------------------------------------------
@@ -50,10 +50,10 @@ def test_init_rejects_unknown_endpoint():
 # ---------------------------------------------------------------------------
 
 def test_build_output_path_uses_mineru_structure(tmp_path):
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
     pub = _make_pub("10.1000/A", tmp_path)
     stem = pub.publication_filepath.stem
-    converter = MinerUPdfConverter(publication_list=[pub])
+    converter = MinerUPdfTransformer(publication_list=[pub])
     converter.output_dir = tmp_path
 
     result = converter._build_output_path(pub)
@@ -63,10 +63,10 @@ def test_build_output_path_uses_mineru_structure(tmp_path):
 
 def test_build_output_path_uses_vlm_subdir_for_vllm_endpoint(tmp_path):
     """The vlm-http-client backend nests output under vlm/, not auto/."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
     pub = _make_pub("10.1000/A", tmp_path)
     stem = pub.publication_filepath.stem
-    converter = MinerUPdfConverter(publication_list=[pub], mineru_endpoint="vllm")
+    converter = MinerUPdfTransformer(publication_list=[pub], mineru_endpoint="vllm")
     converter.output_dir = tmp_path
 
     result = converter._build_output_path(pub)
@@ -79,26 +79,26 @@ def test_build_output_path_uses_vlm_subdir_for_vllm_endpoint(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_convert_returns_json_path(tmp_path):
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pub = _make_pub("10.1000/D", tmp_path)
-    converter = MinerUPdfConverter(publication_list=[pub])
+    converter = MinerUPdfTransformer(publication_list=[pub])
     converter.output_dir = tmp_path
     md_file = _make_md(converter, pub)
 
-    result = converter.convert(pub)
+    result = converter.transform2json(pub)
 
     assert result == md_file
 
 
 def test_convert_returns_none_when_json_missing(tmp_path):
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pub = _make_pub("10.1000/G", tmp_path)
-    converter = MinerUPdfConverter(publication_list=[pub])
+    converter = MinerUPdfTransformer(publication_list=[pub])
     converter.output_dir = tmp_path
 
-    result = converter.convert(pub)
+    result = converter.transform2json(pub)
 
     assert result is None
 
@@ -109,10 +109,10 @@ def test_convert_returns_none_when_json_missing(tmp_path):
 
 def test_convert_all_runs_mineru_once_for_all_pubs(tmp_path):
     """All PDFs are staged into one directory and converted in a single call."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter, MINERU_OCR_LANG
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer, MINERU_OCR_LANG
 
     pubs = [_make_pub(f"10.1000/{c}", tmp_path) for c in "ABC"]
-    converter = MinerUPdfConverter(publication_list=pubs)
+    converter = MinerUPdfTransformer(publication_list=pubs)
     converter.output_dir = tmp_path
 
     captured = {}
@@ -128,7 +128,7 @@ def test_convert_all_runs_mineru_once_for_all_pubs(tmp_path):
     with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
          patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run) as mock_run, \
          patch.object(converter, "_cache_result"):
-        converter.convert_all()
+        converter.transform_all()
 
     mock_run.assert_called_once()
     assert captured["staged"] == sorted(pub.publication_filepath.name for pub in pubs)
@@ -143,10 +143,10 @@ def test_convert_all_runs_mineru_once_for_all_pubs(tmp_path):
 def test_convert_all_vllm_uses_http_client_backend(tmp_path):
     """vllm mode passes -b vlm-http-client, points -u at the configured endpoint,
     exposes the API key as MINERU_VL_API_KEY, and omits the pipeline-only -l flag."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pub = _make_pub("10.1000/R", tmp_path)
-    converter = MinerUPdfConverter(publication_list=[pub], mineru_endpoint="vllm")
+    converter = MinerUPdfTransformer(publication_list=[pub], mineru_endpoint="vllm")
     converter.output_dir = tmp_path
 
     captured = {}
@@ -162,7 +162,7 @@ def test_convert_all_vllm_uses_http_client_backend(tmp_path):
          patch("text_transformation.converters.mineru_pdf_to_md.MINERU_API_KEY", "test-key"), \
          patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
          patch.object(converter, "_cache_result"):
-        converter.convert_all()
+        converter.transform_all()
 
     cmd = captured["cmd"]
     assert cmd[cmd.index("-b") + 1] == "vlm-http-client"
@@ -174,11 +174,11 @@ def test_convert_all_vllm_uses_http_client_backend(tmp_path):
 
 def test_convert_all_local_does_not_leak_vl_api_key(tmp_path, monkeypatch):
     """Local mode must not set MINERU_VL_API_KEY even when the secret is configured."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     monkeypatch.delenv("MINERU_VL_API_KEY", raising=False)
     pub = _make_pub("10.1000/L", tmp_path)
-    converter = MinerUPdfConverter(publication_list=[pub])
+    converter = MinerUPdfTransformer(publication_list=[pub])
     converter.output_dir = tmp_path
 
     captured = {}
@@ -191,30 +191,30 @@ def test_convert_all_local_does_not_leak_vl_api_key(tmp_path, monkeypatch):
          patch("text_transformation.converters.mineru_pdf_to_md.MINERU_API_KEY", "test-key"), \
          patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
          patch.object(converter, "_cache_result"):
-        converter.convert_all()
+        converter.transform_all()
 
     assert "MINERU_VL_API_KEY" not in captured["env"]
 
 
 def test_convert_all_skips_batch_for_empty_list():
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
-    converter = MinerUPdfConverter(publication_list=[])
+    converter = MinerUPdfTransformer(publication_list=[])
 
     with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
          patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run") as mock_run:
-        converter.convert_all()
+        converter.transform_all()
 
     mock_run.assert_not_called()
 
 
 def test_convert_all_does_not_restage_existing_outputs(tmp_path):
     """Pubs whose .md is already on disk are cached without being reconverted."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     done_pub = _make_pub("10.1000/DONE", tmp_path)
     new_pub = _make_pub("10.1000/NEW", tmp_path)
-    converter = MinerUPdfConverter(publication_list=[done_pub, new_pub])
+    converter = MinerUPdfTransformer(publication_list=[done_pub, new_pub])
     converter.output_dir = tmp_path
     _make_md(converter, done_pub)
 
@@ -229,7 +229,7 @@ def test_convert_all_does_not_restage_existing_outputs(tmp_path):
     with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
          patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
          patch.object(converter, "_cache_result") as mock_cache:
-        converter.convert_all()
+        converter.transform_all()
 
     assert captured["staged"] == [new_pub.publication_filepath.name]
     assert done_pub.content_json_filepath == converter._build_output_path(done_pub)
@@ -239,10 +239,10 @@ def test_convert_all_does_not_restage_existing_outputs(tmp_path):
 
 def test_convert_all_skips_batch_when_all_outputs_exist(tmp_path):
     """If every pub already has output on disk, no MinerU subprocess is spawned."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pubs = [_make_pub(f"10.1000/{c}", tmp_path) for c in "AB"]
-    converter = MinerUPdfConverter(publication_list=pubs)
+    converter = MinerUPdfTransformer(publication_list=pubs)
     converter.output_dir = tmp_path
     for pub in pubs:
         _make_md(converter, pub)
@@ -250,7 +250,7 @@ def test_convert_all_skips_batch_when_all_outputs_exist(tmp_path):
     with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
          patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run") as mock_run, \
          patch.object(converter, "_cache_result") as mock_cache:
-        converter.convert_all()
+        converter.transform_all()
 
     mock_run.assert_not_called()
     assert all(pub.content_json_filepath == converter._build_output_path(pub) for pub in pubs)
@@ -259,11 +259,11 @@ def test_convert_all_skips_batch_when_all_outputs_exist(tmp_path):
 
 def test_convert_all_nonzero_exit_still_collects_outputs(tmp_path):
     """A failed batch is not fatal — publications whose .md exists are still cached."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     ok_pub = _make_pub("10.1000/OK", tmp_path)
     bad_pub = _make_pub("10.1000/BAD", tmp_path)
-    converter = MinerUPdfConverter(publication_list=[ok_pub, bad_pub])
+    converter = MinerUPdfTransformer(publication_list=[ok_pub, bad_pub])
     converter.output_dir = tmp_path
 
     def fake_run(cmd, **kwargs):
@@ -273,7 +273,7 @@ def test_convert_all_nonzero_exit_still_collects_outputs(tmp_path):
     with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
          patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
          patch.object(converter, "_cache_result") as mock_cache:
-        converter.convert_all()
+        converter.transform_all()
 
     assert ok_pub.content_json_filepath == converter._build_output_path(ok_pub)
     assert bad_pub.content_json_filepath is None
@@ -281,10 +281,10 @@ def test_convert_all_nonzero_exit_still_collects_outputs(tmp_path):
 
 
 def test_convert_all_passes_vram_override_when_set(tmp_path):
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pub = _make_pub("10.1000/V", tmp_path)
-    converter = MinerUPdfConverter(publication_list=[pub])
+    converter = MinerUPdfTransformer(publication_list=[pub])
     converter.output_dir = tmp_path
 
     captured = {}
@@ -297,18 +297,18 @@ def test_convert_all_passes_vram_override_when_set(tmp_path):
          patch("text_transformation.converters.mineru_pdf_to_md.MINERU_VIRTUAL_VRAM_SIZE", "16"), \
          patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
          patch.object(converter, "_cache_result"):
-        converter.convert_all()
+        converter.transform_all()
 
     assert captured["env"]["MINERU_VIRTUAL_VRAM_SIZE"] == "16"
 
 
 def test_convert_all_strips_blank_vram_override(tmp_path, monkeypatch):
     """A blank value in secrets.env must not reach the MinerU subprocess."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     monkeypatch.setenv("MINERU_VIRTUAL_VRAM_SIZE", "")
     pub = _make_pub("10.1000/W", tmp_path)
-    converter = MinerUPdfConverter(publication_list=[pub])
+    converter = MinerUPdfTransformer(publication_list=[pub])
     converter.output_dir = tmp_path
 
     captured = {}
@@ -321,38 +321,38 @@ def test_convert_all_strips_blank_vram_override(tmp_path, monkeypatch):
          patch("text_transformation.converters.mineru_pdf_to_md.MINERU_VIRTUAL_VRAM_SIZE", ""), \
          patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
          patch.object(converter, "_cache_result"):
-        converter.convert_all()
+        converter.transform_all()
 
     assert "MINERU_VIRTUAL_VRAM_SIZE" not in captured["env"]
 
 
 def test_convert_all_uses_base_class(tmp_path):
-    """convert_all() uses the base class iteration (calls convert per pub)."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
+    """transform_all() uses the base class iteration (calls transform2json per pub)."""
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pubs = [_make_pub("10.1000/X", tmp_path)]
-    converter = MinerUPdfConverter(publication_list=pubs)
+    converter = MinerUPdfTransformer(publication_list=pubs)
 
     with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
          patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", return_value=MagicMock(returncode=0)), \
-         patch.object(converter, "convert", return_value=None) as mock_convert, \
+         patch.object(converter, "transform2json", return_value=None) as mock_transform, \
          patch.object(converter, "_cache_result"):
-        converter.convert_all()
+        converter.transform_all()
 
-    mock_convert.assert_called_once_with(pubs[0])
+    mock_transform.assert_called_once_with(pubs[0])
 
 
 def test_convert_all_checks_mineru_once(tmp_path):
-    """convert_all() calls check_mineru exactly once regardless of publication count."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfConverter
+    """transform_all() calls check_mineru exactly once regardless of publication count."""
+    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(3)]
-    converter = MinerUPdfConverter(publication_list=pubs)
+    converter = MinerUPdfTransformer(publication_list=pubs)
 
     with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU) as mock_check, \
          patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", return_value=MagicMock(returncode=0)), \
-         patch.object(converter, "convert", return_value=None), \
+         patch.object(converter, "transform2json", return_value=None), \
          patch.object(converter, "_cache_result"):
-        converter.convert_all()
+        converter.transform_all()
 
     mock_check.assert_called_once()
