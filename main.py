@@ -2,14 +2,8 @@ from __future__ import annotations
 import logging
 from time import perf_counter
 from pathlib import Path
-from config import SCOPUS_INPUT_CSV_NAME, DB_CACHE_FILE_NAME
-from text_download.filter import filter_scopus_csv as ftr
-from text_download.utils.generics import setup_logging, setup_run, clean_publications
-from text_download.controller.controller import Controller
-from text_download.apis.router import ApiRouter
+
 from text_download.basemodels.publication import Publication
-from text_download.visualisation.text_extraction_report import build_text_download_report
-from text_download.utils.generics import build_new_corpus
 
 # High-level functions.
 def create_corpus(name: str) -> Path:
@@ -77,6 +71,13 @@ def download_corpus(check_opensource: bool = True) -> list[Publication]:
         Each object carries DOI, title, publisher, year, document type, and the
         filepath of the downloaded PDF or XML (None if download failed).
     """
+
+    from config import SCOPUS_INPUT_CSV_NAME
+    from text_download.filter import filter_scopus_csv as ftr
+    from text_download.utils.generics import setup_logging, setup_run, clean_publications
+    from text_download.controller.controller import Controller
+    from text_download.apis.router import ApiRouter
+    from text_download.visualisation.text_extraction_report import build_text_download_report
 
     # Start timing the whole function.
     function_start = perf_counter()
@@ -241,6 +242,7 @@ def standardise_text(
         standardised publications have final_md_filepath set; others have it as None.
     """
 
+    from config import DB_CACHE_FILE_NAME
     from standardisation.generics import prepare_standardisation
     from standardisation.text_cleaning.cleaner import Cleaner
 
@@ -281,7 +283,9 @@ def standardise_text(
 
 
 if __name__ == "__main__":
+    from text_download.utils.generics import setup_logging
 
+    # Setup.
     setup_logging(level=logging.INFO)
     logging.info("Complete a full new corpus conversion.")
 
