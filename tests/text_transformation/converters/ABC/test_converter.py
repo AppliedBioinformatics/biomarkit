@@ -14,7 +14,7 @@ DB_SCHEMA = """
     doi TEXT UNIQUE NOT NULL,
     downloaded_from TEXT NOT NULL,
     publication_filepath TEXT NOT NULL,
-    raw_md_filepath TEXT,
+    content_json_filepath TEXT,
     final_md_filepath TEXT)
 """
 
@@ -28,8 +28,8 @@ def _setup_db(rows: list[dict]) -> None:
         conn.execute(DB_SCHEMA)
         conn.executemany(
             "INSERT INTO cache "
-            "(doi, downloaded_from, publication_filepath, raw_md_filepath, final_md_filepath) "
-            "VALUES (:doi, :downloaded_from, :publication_filepath, :raw_md_filepath, :final_md_filepath)",
+            "(doi, downloaded_from, publication_filepath, content_json_filepath, final_md_filepath) "
+            "VALUES (:doi, :downloaded_from, :publication_filepath, :content_json_filepath, :final_md_filepath)",
             rows,
         )
 
@@ -64,8 +64,8 @@ def _make_converter_class(convert_fn):
 # _build_output_path
 # ---------------------------------------------------------------------------
 
-def test_build_output_path_places_md_in_stem_subdir(tmp_path):
-    """Output path is output_dir/<stem>/<stem>.md."""
+def test_build_output_path_places_json_in_auto_subdir(tmp_path):
+    """Output path is output_dir/<stem>/auto/<stem>_content_list_v2.json."""
     pub = _make_pub("10.1037/bp1", tmp_path)
     stem = pub.publication_filepath.stem
 
@@ -75,7 +75,7 @@ def test_build_output_path_places_md_in_stem_subdir(tmp_path):
 
     result = converter._build_output_path(pub)
 
-    assert result == tmp_path / stem / f"{stem}.md"
+    assert result == tmp_path / stem / "auto" / f"{stem}_content_list_v2.json"
 
 
 def test_default_output_dir_is_raw_markdown_dir():
@@ -90,7 +90,7 @@ def test_default_output_dir_is_raw_markdown_dir():
 # _cache_result
 # ---------------------------------------------------------------------------
 
-def test_cache_result_writes_raw_md_filepath_to_db(tmp_path):
+def test_cache_result_writes_content_json_filepath_to_db(tmp_path):
     pub = _make_pub("10.1037/cr1", tmp_path)
     raw_md = tmp_path / "output.md"
     raw_md.touch()
@@ -99,11 +99,11 @@ def test_cache_result_writes_raw_md_filepath_to_db(tmp_path):
         "doi": pub.doi,
         "downloaded_from": "publisher",
         "publication_filepath": str(pub.publication_filepath),
-        "raw_md_filepath": None,
+        "content_json_filepath": None,
         "final_md_filepath": None,
     }])
 
-    pub.raw_md_filepath = raw_md
+    pub.content_json_filepath = raw_md
 
     from text_transformation.converters.ABC.converter import Converter
     cls = _make_converter_class(lambda p: None)
@@ -112,7 +112,7 @@ def test_cache_result_writes_raw_md_filepath_to_db(tmp_path):
     converter._cache_result(pub)
 
     row = get_row_for_doi(pub.doi, TMP_DB)
-    assert row["raw_md_filepath"] == str(raw_md)
+    assert row["content_json_filepath"] == str(raw_md)
 
 
 # ---------------------------------------------------------------------------
@@ -121,7 +121,7 @@ def test_cache_result_writes_raw_md_filepath_to_db(tmp_path):
 
 @pytest.mark.skipif(os.name == 'nt', reason="Permission issues on Windows")
 def test_convert_all_success(tmp_path):
-    """All publications converted — raw_md_filepath set and cache updated."""
+    """All publications converted — content_json_filepath set and cache updated."""
     pubs = [_make_pub(f"10.1037/ca{i}", tmp_path) for i in range(3)]
     output_files = [tmp_path / f"out{i}.md" for i in range(3)]
     for f in output_files:
@@ -131,7 +131,7 @@ def test_convert_all_success(tmp_path):
         "doi": pub.doi,
         "downloaded_from": "publisher",
         "publication_filepath": str(pub.publication_filepath),
-        "raw_md_filepath": None,
+        "content_json_filepath": None,
         "final_md_filepath": None,
     } for pub in pubs])
 
@@ -145,9 +145,9 @@ def test_convert_all_success(tmp_path):
     converter.convert_all()
 
     for pub, expected_file in zip(pubs, output_files):
-        assert pub.raw_md_filepath == expected_file
+        assert pub.content_json_filepath == expected_file
         row = get_row_for_doi(pub.doi, TMP_DB)
-        assert row["raw_md_filepath"] == str(expected_file)
+        assert row["content_json_filepath"] == str(expected_file)
 
 
 # ---------------------------------------------------------------------------
@@ -163,9 +163,9 @@ def test_convert_all_skips_on_none_return(tmp_path):
 
     _setup_db([
         {"doi": pub_fail.doi, "downloaded_from": "p", "publication_filepath": str(pub_fail.publication_filepath),
-         "raw_md_filepath": None, "final_md_filepath": None},
+         "content_json_filepath": None, "final_md_filepath": None},
         {"doi": pub_ok.doi,   "downloaded_from": "p", "publication_filepath": str(pub_ok.publication_filepath),
-         "raw_md_filepath": None, "final_md_filepath": None},
+         "content_json_filepath": None, "final_md_filepath": None},
     ])
 
     def convert_fn(pub):
@@ -176,11 +176,11 @@ def test_convert_all_skips_on_none_return(tmp_path):
     converter.cache = TMP_DB
     converter.convert_all()
 
-    assert pub_fail.raw_md_filepath is None
-    assert pub_ok.raw_md_filepath == out_file
+    assert pub_fail.content_json_filepath is None
+    assert pub_ok.content_json_filepath == out_file
 
-    assert get_row_for_doi(pub_fail.doi, TMP_DB)["raw_md_filepath"] is None
-    assert get_row_for_doi(pub_ok.doi, TMP_DB)["raw_md_filepath"] == str(out_file)
+    assert get_row_for_doi(pub_fail.doi, TMP_DB)["content_json_filepath"] is None
+    assert get_row_for_doi(pub_ok.doi, TMP_DB)["content_json_filepath"] == str(out_file)
 
 
 # ---------------------------------------------------------------------------
@@ -196,9 +196,9 @@ def test_convert_all_skips_on_exception(tmp_path):
 
     _setup_db([
         {"doi": pub_err.doi, "downloaded_from": "p", "publication_filepath": str(pub_err.publication_filepath),
-         "raw_md_filepath": None, "final_md_filepath": None},
+         "content_json_filepath": None, "final_md_filepath": None},
         {"doi": pub_ok.doi,  "downloaded_from": "p", "publication_filepath": str(pub_ok.publication_filepath),
-         "raw_md_filepath": None, "final_md_filepath": None},
+         "content_json_filepath": None, "final_md_filepath": None},
     ])
 
     def convert_fn(pub):
@@ -211,5 +211,5 @@ def test_convert_all_skips_on_exception(tmp_path):
     converter.cache = TMP_DB
     converter.convert_all()
 
-    assert pub_err.raw_md_filepath is None
-    assert pub_ok.raw_md_filepath == out_file
+    assert pub_err.content_json_filepath is None
+    assert pub_ok.content_json_filepath == out_file

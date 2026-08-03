@@ -8,7 +8,7 @@ DB_SCHEMA = """
     doi TEXT UNIQUE NOT NULL,
     downloaded_from TEXT NOT NULL,
     publication_filepath TEXT NOT NULL,
-    raw_md_filepath TEXT,
+    content_json_filepath TEXT,
     final_md_filepath TEXT)
     """
 
@@ -65,20 +65,20 @@ def insert_row(doi: str, downloaded_from: str, publication_filepath: str, db_pat
     finally:
         conn.close()
 
-def update_raw_md_filepath(doi: str, raw_md_filepath: str, db_path: Union[str, Path]) -> None:
+def update_content_json_filepath(doi: str, content_json_filepath: str, db_path: Union[str, Path]) -> None:
     """
-    Updates the raw_md_filepath column for an existing cache row identified by DOI.
+    Updates the content_json_filepath column for an existing cache row identified by DOI.
 
     Parameters
     ----------
     doi : str - The DOI of the publication to update.
-    raw_md_filepath : str - Path to the raw markdown file produced by the converter.
+    content_json_filepath : str - Path to the content_list_v2.json file produced by the converter.
     db_path : Union[str, Path] - Path to the SQLite database file.
     """
     with sqlite3.connect(str(db_path)) as conn:
         conn.execute(
-            "UPDATE cache SET raw_md_filepath = ? WHERE doi = ?",
-            (raw_md_filepath, doi)
+            "UPDATE cache SET content_json_filepath = ? WHERE doi = ?",
+            (content_json_filepath, doi)
         )
         conn.commit()
 
@@ -104,7 +104,7 @@ def update_final_md_filepath(doi: str, final_md_filepath: str, db_path: Union[st
 def get_row_for_doi(doi: str, db_path: Path) -> dict or None:
     """
     Searches the cache for a DOI. Returns the row if found, None otherwise. Row is returned in the following format:
-    {"doi": <value>, "downloaded_from": <value>, "publication_filepath": <value>, "raw_md_filepath": <value>, "final_md_filepath": <value>}
+    {"doi": <value>, "downloaded_from": <value>, "publication_filepath": <value>, "content_json_filepath": <value>, "final_md_filepath": <value>}
 
     Parameters
     ----------

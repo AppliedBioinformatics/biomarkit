@@ -12,8 +12,8 @@ class Controller:
     Receives a list of Publication objects and cross-references each against the cache database.
     Sorts publications into three lists based on how many filepath columns are populated:
 
-    - needs_conversion  : publication_filepath only — raw markdown not yet generated.
-    - needs_processing  : publication_filepath + raw_md_filepath — final markdown not yet generated.
+    - needs_conversion  : publication_filepath only — content JSON not yet generated.
+    - needs_processing  : publication_filepath + content_json_filepath — final markdown not yet generated.
     - fully_processed   : all three filepaths set — no further action required.
     """
 
@@ -74,7 +74,7 @@ class Controller:
                 continue
 
             pub.publication_filepath = Path(row["publication_filepath"])
-            pub.raw_md_filepath = Path(row["raw_md_filepath"]) if row.get("raw_md_filepath") else None
+            pub.content_json_filepath = Path(row["content_json_filepath"]) if row.get("content_json_filepath") else None
             pub.final_md_filepath = Path(row["final_md_filepath"]) if row.get("final_md_filepath") else None
 
         logging.info("Finished updating publication filepath states from cache.")

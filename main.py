@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from typing import Dict
 import logging
 from time import perf_counter
 from pathlib import Path
@@ -178,35 +178,50 @@ def transform_text(
         all_pubs = controller.needs_conversion + controller.needs_processing + controller.fully_processed
     return finalise_transformation(all_pubs)
 
-def standardise_text(
-    publications: list[Publication],
-    keep_latex: bool = False,
-    keep_tables: bool = False,
-) -> list[Publication]:
+def standardise_text(publications: list[Publication],
+                     keep_figures: bool = False,
+                     keep_tables: bool = False,
+                     keep_latex: bool = False,
+                     keep_references: bool = False,
+                     force_imrad_structure = True) -> list[Publication]:
     """
-    Cleans and standardises raw markdown files into their final standardised markdown form. Returns the
-    publications that were successfully standardised (final_md_filepath set).
+    Cleans and standardizes raw markdown file outputs from text_transformation() into a final standardised markdown
+    format that can be customised by the user through the context parameter. Returns the publications that were
+    successfully standardized (final_md_filepath set in the cache).
     """
 
     from standardisation.generics import prepare_standardisation
-    from standardisation.llms.providers.llama_section_classifier import LlamaSectionClassifier
     from standardisation.text_cleaning.cleaner import Cleaner
 
     # Pre-flight: check the LLM fallback endpoint. The run continues without it.
     llm_available = prepare_standardisation()
 
-    # Filter out publications without raw markdown files.
-    publications = [p for p in publications if p.raw_md_filepath is not None]
+    # Raise a runtime error to inform the user that the ollama endpoint is not accessible.
+    if not llm_available:
+        raise RuntimeError("LLM fallback endpoint is not available. Cannot proceed.")
+
+    logging.info("Preflight checks passed. Proceeding with standardisation.")
+
+    # Get only publications that have not already been standardised (final_md_filepath is not set in the cache).
+    publications = [p for p in publications if p.content_json_filepath is not None]
     logging.info(f"standardise_text: {len(publications)} publications have raw markdown files.")
 
+    # Build the custom instructions for the Cleaner class.
+    context = {"keep_figures": keep_figures,
+               "keep_tables": keep_tables,
+               "keep_latex": keep_latex,
+               "keep_references": keep_references,
+               "force_imrad_structure": force_imrad_structure}
+
+    # Instantiate the Cleaner class and clean the publications according to the params defined by the user.
     cleaner = Cleaner(
-        publication_list=publications, cache=DB_CACHE_FILE,
-        classifier=LlamaSectionClassifier() if llm_available else None,
-        keep_latex=keep_latex,
-        keep_tables=keep_tables,
+        publications=publications,
+        cache=DB_CACHE_FILE,
+        context=context
     )
     cleaner.clean_all()
 
+    # Get total number of cleaned publications.
     standardised = [p for p in publications if p.final_md_filepath is not None]
     logging.info(f"standardise_text: {len(standardised)}/{len(publications)} publications standardised.")
     return standardised
@@ -227,7 +242,7 @@ if __name__ == "__main__":
 
     logging.info("Conversion of first paper may take longer due to model weight download.")
     standardise_start = perf_counter()
-    standardise_text(publications, keep_latex=True, keep_tables=False)
+    standardise_text(publications, keep_latex=False, keep_tables=False, force_imrad_structure=True)
     standardise_seconds = perf_counter() - standardise_start
     logging.info("standardise_text() complete in %.2fs.", standardise_seconds)
 

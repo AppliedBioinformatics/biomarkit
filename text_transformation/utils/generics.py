@@ -133,7 +133,7 @@ def check_cache_for_markdowns() -> None:
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM cache")
         total = cursor.fetchone()[0]
-        cursor.execute("SELECT COUNT(*) FROM cache WHERE raw_md_filepath IS NOT NULL")
+        cursor.execute("SELECT COUNT(*) FROM cache WHERE content_json_filepath IS NOT NULL")
         raw_count = cursor.fetchone()[0]
         cursor.execute("SELECT COUNT(*) FROM cache WHERE final_md_filepath IS NOT NULL")
         final_count = cursor.fetchone()[0]
@@ -145,7 +145,7 @@ def finalise_transformation(publications: list) -> list:
     """
     Validates and returns publications after text transformation for handoff to the standardiser.
 
-    Logs how many publications have ``raw_md_filepath`` set and asserts the ready subset is
+    Logs how many publications have ``content_json_filepath`` set and asserts the ready subset is
     internally consistent (no pub in that subset is missing its filepath).
 
     Parameters
@@ -158,15 +158,15 @@ def finalise_transformation(publications: list) -> list:
     -------
     list[Publication]
         The same list, unmodified.  Returning the full list (not just those with
-        raw_md_filepath) gives the standardiser visibility over failures too.
+        content_json_filepath) gives the standardiser visibility over failures too.
     """
-    ready = [pub for pub in publications if pub.raw_md_filepath is not None]
+    ready = [pub for pub in publications if pub.content_json_filepath is not None]
     logging.info(
         f"transform_text complete — {len(ready)}/{len(publications)} "
-        "publication(s) have raw_md_filepath set."
+        "publication(s) have content_json_filepath set."
     )
-    assert all(pub.raw_md_filepath is not None for pub in ready), \
-        "Invariant violation: ready pub missing raw_md_filepath"
+    assert all(pub.content_json_filepath is not None for pub in ready), \
+        "Invariant violation: ready pub missing content_json_filepath"
     return publications
 
 

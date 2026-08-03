@@ -18,7 +18,7 @@ def _make_pub(doi: str, tmp_path: Path, doc_type: str = "PDF",
         doi=doi, title="Test", publisher=publisher, year=year,
         document_type=doc_type,
         publication_filepath=pub_file,
-        raw_md_filepath=md,
+        content_json_filepath=md,
     )
 
 

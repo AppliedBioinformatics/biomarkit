@@ -5,7 +5,7 @@ from typing import List
 
 from config import DB_CACHE_FILE, RAW_MARKDOWN_DIR
 from text_extraction.basemodels.publication import Publication
-from text_extraction.database.database import update_raw_md_filepath
+from text_extraction.database.database import update_content_json_filepath
 
 
 class Converter(ABC):
@@ -45,8 +45,8 @@ class Converter(ABC):
 
     def _build_output_path(self, pub: Publication) -> Path:
         """
-        Derives the output markdown filepath from the publication's source filename.
-        Output convention: output_dir/<stem>/<stem>.md
+        Derives the content_list_v2.json filepath from the publication's source filename.
+        Output convention: output_dir/<stem>/auto/<stem>_content_list_v2.json
 
         Parameters
         ----------
@@ -54,32 +54,32 @@ class Converter(ABC):
 
         Returns
         -------
-        Path - Target path for the raw markdown file.
+        Path - Target path for the content_list_v2.json file.
         """
         if pub.publication_filepath is None:
             raise ValueError(f"Cannot build output path for {pub.doi}: publication_filepath is not set.")
         stem = pub.publication_filepath.stem
-        return self.output_dir / stem / f"{stem}.md"
+        return self.output_dir / stem / "auto" / f"{stem}_content_list_v2.json"
 
     def _cache_result(self, pub: Publication) -> None:
         """
-        Writes the raw_md_filepath back to the cache row for the given publication.
+        Writes the content_json_filepath back to the cache row for the given publication.
 
         Parameters
         ----------
-        pub : Publication - Must have raw_md_filepath set before calling.
+        pub : Publication - Must have content_json_filepath set before calling.
         """
-        update_raw_md_filepath(
+        update_content_json_filepath(
             doi=pub.doi,
-            raw_md_filepath=str(pub.raw_md_filepath),
+            content_json_filepath=str(pub.content_json_filepath),
             db_path=self.cache,
         )
-        logging.info(f"Cache updated with raw_md_filepath for {pub.doi}.")
+        logging.info(f"Cache updated with content_json_filepath for {pub.doi}.")
 
     def convert_all(self) -> None:
         """
         Iterates self.publication_list, calls convert() on each publication,
-        updates pub.raw_md_filepath on success, and writes the result to the cache.
+        updates pub.content_json_filepath on success, and writes the result to the cache.
         Failed conversions are logged as warnings and skipped.
 
         Returns
@@ -98,7 +98,7 @@ class Converter(ABC):
                     logging.warning(f"Conversion returned None for {pub.doi} — skipping.")
                     failed += 1
                     continue
-                pub.raw_md_filepath = result
+                pub.content_json_filepath = result
                 self._cache_result(pub)
                 passed += 1
 

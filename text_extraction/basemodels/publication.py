@@ -22,7 +22,7 @@ class Publication(BaseModel):
     abstract: Optional[str] - Abstract of the publication, sourced from the Scopus CSV export. None if not available.
     document_type : DocumentType - Type of the publication document, restricted to values defined by DocumentType().
     publication_filepath: Path to the document file (must exist if provided).
-    raw_md_filepath: Path to the raw unprocessed markdown file (must exist if provided).
+    content_json_filepath: Path to the structured content_list_v2.json file (must exist if provided).
     final_md_filepath: Path to the final processed markdown file (must exist if provided).
     chunks: Optional list of Chunk objects produced by the chunking pipeline.
     """
@@ -35,7 +35,7 @@ class Publication(BaseModel):
     abstract: Optional[str] = None
     document_type: DocumentType = "PDF"
     publication_filepath: Optional[FilePath] = None
-    raw_md_filepath: Optional[FilePath] = None
+    content_json_filepath: Optional[FilePath] = None
     final_md_filepath: Optional[FilePath] = None
     chunks: Optional[List[Any]] = None  # List[Chunk] — typed as Any to avoid circular import
 
@@ -49,7 +49,7 @@ class Publication(BaseModel):
 
     @property
     def is_converted(self) -> bool:
-        return self.raw_md_filepath is not None
+        return self.content_json_filepath is not None
 
     @property
     def is_processed(self) -> bool:

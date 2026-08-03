@@ -7,7 +7,7 @@ BASE_DIR = Path(__file__).resolve().parent
 
 # Corpus selection - Most likely to be updated by user. Each corpus lives in its own
 # subfolder of corpora/ and holds its own inputs, outputs, cache, reports and logs.
-CORPUS_NAME = "rishi"
+CORPUS_NAME = "luca"
 
 SECRETS_FILE = BASE_DIR / "secrets.env"
 
@@ -37,7 +37,7 @@ ELSEVIER_API_KEY = getenv("ELSEVIER_API_KEY")
 # LLM Settings - fallback section classifier, served by a local Ollama instance by default.
 # Any OpenAI-compatible endpoint can be substituted via secrets.env.
 LLM_BASE_URL = getenv("LLM_BASE_URL", "http://localhost:11434/v1")
-LLM_MODEL_NAME = getenv("LLM_MODEL_NAME", "llama3.2:3b")
+LLM_MODEL_NAME = getenv("LLM_MODEL_NAME", "gemma3:12b")
 
 # MinerU settings (optional). Integer GB of GPU VRAM MinerU is allowed to budget for;
 # overrides its auto-detection and raises inference batch sizes on larger GPUs.

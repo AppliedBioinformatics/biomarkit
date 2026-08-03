@@ -14,7 +14,7 @@ DB_SCHEMA = """
     doi TEXT UNIQUE NOT NULL,
     downloaded_from TEXT NOT NULL,
     publication_filepath TEXT NOT NULL,
-    raw_md_filepath TEXT,
+    content_json_filepath TEXT,
     final_md_filepath TEXT)
 """
 
@@ -28,22 +28,22 @@ def _setup_db(rows: list[dict]) -> None:
         conn.execute(DB_SCHEMA)
         conn.executemany(
             "INSERT INTO cache "
-            "(doi, downloaded_from, publication_filepath, raw_md_filepath, final_md_filepath) "
-            "VALUES (:doi, :downloaded_from, :publication_filepath, :raw_md_filepath, :final_md_filepath)",
+            "(doi, downloaded_from, publication_filepath, content_json_filepath, final_md_filepath) "
+            "VALUES (:doi, :downloaded_from, :publication_filepath, :content_json_filepath, :final_md_filepath)",
             rows,
         )
 
 
 def _make_pub(doi: str, tmp_path: Path, publication_filepath: Path = None,
-              raw_md_filepath: Path = None, final_md_filepath: Path = None) -> Publication:
+              content_json_filepath: Path = None, final_md_filepath: Path = None) -> Publication:
     """Builds a Publication object, creating real temp files for any filepath provided."""
     kwargs = dict(doi=doi, title="Test", publisher="TestPublisher", year=2020)
     if publication_filepath:
         publication_filepath.touch()
         kwargs["publication_filepath"] = publication_filepath
-    if raw_md_filepath:
-        raw_md_filepath.touch()
-        kwargs["raw_md_filepath"] = raw_md_filepath
+    if content_json_filepath:
+        content_json_filepath.touch()
+        kwargs["content_json_filepath"] = content_json_filepath
     if final_md_filepath:
         final_md_filepath.touch()
         kwargs["final_md_filepath"] = final_md_filepath
@@ -76,14 +76,14 @@ def mixed_publications(tmp_path):
         "10.1037/tta",
         tmp_path,
         publication_filepath=tmp_path / "a.pdf",
-        raw_md_filepath=tmp_path / "a_raw.md",
+        content_json_filepath=tmp_path / "a_raw.md",
         final_md_filepath=tmp_path / "a_final.md",
     )
     pub_b = _make_pub(
         "10.1037/ttb",
         tmp_path,
         publication_filepath=tmp_path / "b.pdf",
-        raw_md_filepath=tmp_path / "b_raw.md",
+        content_json_filepath=tmp_path / "b_raw.md",
     )
     pub_c = _make_pub(
         "10.1037/ttc",
@@ -179,7 +179,7 @@ def test_update_sets_all_three_filepaths(tmp_path, uncached_publications):
         "doi": doi,
         "downloaded_from": "publisher",
         "publication_filepath": str(pub_file),
-        "raw_md_filepath": str(raw_file),
+        "content_json_filepath": str(raw_file),
         "final_md_filepath": str(final_file),
     }])
 
@@ -188,7 +188,7 @@ def test_update_sets_all_three_filepaths(tmp_path, uncached_publications):
     controller._update_publications_cache_state()
 
     assert pub.publication_filepath == pub_file
-    assert pub.raw_md_filepath == raw_file
+    assert pub.content_json_filepath == raw_file
     assert pub.final_md_filepath == final_file
 
 @pytest.mark.skipif(os.name == 'nt', reason="Permission issues on Windows")
@@ -203,7 +203,7 @@ def test_update_sets_only_publication_filepath_when_no_markdown(tmp_path, uncach
         "doi": pub.doi,
         "downloaded_from": "publisher",
         "publication_filepath": str(pub_file),
-        "raw_md_filepath": None,
+        "content_json_filepath": None,
         "final_md_filepath": None,
     }])
 
@@ -212,7 +212,7 @@ def test_update_sets_only_publication_filepath_when_no_markdown(tmp_path, uncach
     controller._update_publications_cache_state()
 
     assert pub.publication_filepath == pub_file
-    assert pub.raw_md_filepath is None
+    assert pub.content_json_filepath is None
     assert pub.final_md_filepath is None
 
 @pytest.mark.skipif(os.name == 'nt', reason="Permission issues on Windows")
@@ -305,14 +305,14 @@ def test_prepare_publications_full_pipeline(tmp_path):
             "doi": "10.1037/int1",
             "downloaded_from": "publisher",
             "publication_filepath": str(pub_file),
-            "raw_md_filepath": str(raw_file),
+            "content_json_filepath": str(raw_file),
             "final_md_filepath": None,
         },
         {   # needs_conversion
             "doi": "10.1037/int2",
             "downloaded_from": "publisher",
             "publication_filepath": str(pub_file),
-            "raw_md_filepath": None,
+            "content_json_filepath": None,
             "final_md_filepath": None,
         },
     ])
