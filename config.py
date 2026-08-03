@@ -9,6 +9,7 @@ BASE_DIR = Path(__file__).resolve().parent
 # subfolder of corpora/ and holds its own inputs, outputs, cache, reports and logs.
 CORPUS_NAME = "luca"
 
+# Filepath for secrets.env
 SECRETS_FILE = BASE_DIR / "secrets.env"
 
 # Load secrets before reading any values.

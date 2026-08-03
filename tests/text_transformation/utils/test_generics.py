@@ -9,7 +9,7 @@ RAW_MD = TMP_DIR / "test_raw_markdown"
 FINAL_MD = TMP_DIR / "test_final_markdown"
 
 
-@patch("text_transformation.utils.generics.RAW_MARKDOWN_DIR", RAW_MD)
+@patch("text_transformation.utils.generics.JSON_STRUCT_DIR", RAW_MD)
 @patch("text_transformation.utils.generics.FINAL_MARKDOWN_DIR", FINAL_MD)
 def test_check_transformation_filepaths_creates_directories():
     from text_transformation.utils.generics import check_transformation_filepaths
@@ -29,7 +29,7 @@ def test_check_transformation_filepaths_creates_directories():
         d.rmdir()
 
 
-@patch("text_transformation.utils.generics.RAW_MARKDOWN_DIR", RAW_MD)
+@patch("text_transformation.utils.generics.JSON_STRUCT_DIR", RAW_MD)
 @patch("text_transformation.utils.generics.FINAL_MARKDOWN_DIR", FINAL_MD)
 def test_check_transformation_filepaths_existing_directories():
     from text_transformation.utils.generics import check_transformation_filepaths
