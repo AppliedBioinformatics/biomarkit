@@ -167,8 +167,8 @@ def test_prepare_bulk_transformation_raises_when_mineru_missing(mock_filepaths, 
 def test_prepare_bulk_transformation_rejects_unknown_endpoint():
     from text_transformation.utils.generics import prepare_bulk_transformation
 
-    with pytest.raises(ValueError, match="Invalid mineru_endpoint"):
-        prepare_bulk_transformation(mineru_endpoint="remote")
+    with pytest.raises(ValueError, match="Invalid mineru_backend"):
+        prepare_bulk_transformation(mineru_backend="remote")
 
 
 @patch("text_transformation.utils.generics.check_cache_for_markdowns")
@@ -182,7 +182,7 @@ def test_prepare_bulk_transformation_vllm_tolerates_missing_gpu(
     """With remote inference the missing local GPU is a warning, not an error."""
     from text_transformation.utils.generics import prepare_bulk_transformation
 
-    prepare_bulk_transformation(mineru_endpoint="vllm")
+    prepare_bulk_transformation(mineru_backend="vllm")
 
     mock_vllm.assert_called_once()
     mock_mineru.assert_called_once()
@@ -199,7 +199,7 @@ def test_prepare_bulk_transformation_vllm_raises_when_secrets_missing(
 
     with patch("config.MINERU_VLLM_ENDPOINT", None), patch("config.MINERU_API_KEY", None):
         with pytest.raises(ValueError, match="MINERU_VLLM_ENDPOINT and MINERU_API_KEY"):
-            prepare_bulk_transformation(mineru_endpoint="vllm")
+            prepare_bulk_transformation(mineru_backend="vllm")
 
     mock_mineru.assert_not_called()
 

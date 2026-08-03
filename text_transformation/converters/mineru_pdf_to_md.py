@@ -13,14 +13,14 @@ from typing import List
 from config import MINERU_VIRTUAL_VRAM_SIZE, MINERU_VLLM_ENDPOINT, MINERU_API_KEY
 from text_download.basemodels.publication import Publication
 from text_transformation.converters.ABC.transformer import Transformer
-from text_transformation.utils.generics import check_mineru, MINERU_ENDPOINT_CHOICES
+from text_transformation.utils.generics import check_mineru, MINERU_BACKEND_CHOICES
 
 # OCR language passed to MinerU via -l. The CLI defaults to Chinese ("ch").
 MINERU_OCR_LANG = "en"
 
 # Parse subdirectory MinerU nests output under, per backend:
-# pipeline uses the parse method ("auto"), vlm backends use "vlm".
-MINERU_PARSE_DIR = {"local": "auto", "vllm": "vlm"}
+# pipeline backends use "auto", vlm backends use "vlm".
+MINERU_PARSE_DIR = {"local-gpu": "auto", "local-cpu": "auto", "vllm": "vlm"}
 
 
 class MinerUPdfTransformer(Transformer):
@@ -33,24 +33,24 @@ class MinerUPdfTransformer(Transformer):
     handling are inherited from Converter.
 
     Inference runs locally by default (pipeline backend). With
-    mineru_endpoint="vllm" the CLI acts as a thin client (vlm-http-client
+    mineru_backend="vllm" the CLI acts as a thin client (vlm-http-client
     backend) and delegates inference to the remote vLLM server configured via
     MINERU_VLLM_ENDPOINT / MINERU_API_KEY in secrets.env.
 
     Attributes
     ----------
     output_dir : Path - RAW_MARKDOWN_DIR; MinerU writes <stem>/<parse_dir>/<stem>.md inside here.
-    mineru_endpoint : str - "local" or "vllm"; selects the MinerU backend.
+    mineru_backend : str - "local-gpu", "local-cpu", or "vllm"; selects the MinerU backend.
     """
 
-    def __init__(self, publication_list: List[Publication], mineru_endpoint: str = "local"):
+    def __init__(self, publication_list: List[Publication], mineru_backend: str = "local-gpu"):
         super().__init__(publication_list)
-        if mineru_endpoint not in MINERU_ENDPOINT_CHOICES:
+        if mineru_backend not in MINERU_BACKEND_CHOICES:
             raise ValueError(
-                f"Invalid mineru_endpoint: {mineru_endpoint!r}. "
-                f"Allowed values: {', '.join(MINERU_ENDPOINT_CHOICES)}."
+                f"Invalid mineru_backend: {mineru_backend!r}. "
+                f"Allowed values: {', '.join(MINERU_BACKEND_CHOICES)}."
             )
-        self.mineru_endpoint = mineru_endpoint
+        self.mineru_backend = mineru_backend
 
     def transform_all(self) -> None:
         """
@@ -80,8 +80,10 @@ class MinerUPdfTransformer(Transformer):
         list[str] - Full command to pass to subprocess.run.
         """
         cmd = [str(self._mineru_exe), "-p", str(staging_dir), "-o", str(self.output_dir)]
-        if self.mineru_endpoint == "vllm":
+        if self.mineru_backend == "vllm":
             cmd += ["-b", "vlm-http-client", "-u", MINERU_VLLM_ENDPOINT]
+        elif self.mineru_backend == "local-cpu":
+            cmd += ["-b", "pipeline", "-l", MINERU_OCR_LANG, "--device", "cpu"]
         else:
             cmd += ["-b", "pipeline", "-l", MINERU_OCR_LANG]
         return cmd
@@ -105,7 +107,7 @@ class MinerUPdfTransformer(Transformer):
             # so MinerU auto-detects instead of warning about an invalid integer.
             env.pop("MINERU_VIRTUAL_VRAM_SIZE", None)
 
-        if self.mineru_endpoint == "vllm":
+        if self.mineru_backend == "vllm":
             env["MINERU_VL_API_KEY"] = MINERU_API_KEY
         return env
 
@@ -140,7 +142,7 @@ class MinerUPdfTransformer(Transformer):
             for pub in pending:
                 shutil.copy2(pub.publication_filepath, staging_dir / pub.publication_filepath.name)
 
-            logging.info(f"MinerU batch starting: {len(pending)} PDF(s), endpoint={self.mineru_endpoint}.")
+            logging.info(f"MinerU batch starting: {len(pending)} PDF(s), endpoint={self.mineru_backend}.")
             result = subprocess.run(
                 self._build_batch_command(staging_dir),
                 capture_output=True,
@@ -172,7 +174,7 @@ class MinerUPdfTransformer(Transformer):
         Path - Path to the content_list_v2.json file produced by MinerU.
         """
         stem = pub.publication_filepath.stem
-        return self.output_dir / stem / MINERU_PARSE_DIR[self.mineru_endpoint] / f"{stem}_content_list_v2.json"
+        return self.output_dir / stem / MINERU_PARSE_DIR[self.mineru_backend] / f"{stem}_content_list_v2.json"
 
     def transform2json(self, pub: Publication) -> Path | None:
         """

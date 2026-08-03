@@ -141,7 +141,7 @@ def download_corpus(check_opensource: bool = True) -> list[Publication]:
 
 def transform_text(
     publications: list[Publication],
-    mineru_endpoint: str = "local",
+    mineru_backend: str = "local-gpu",
 ) -> list[Publication]:
     """
     Convert downloaded PDFs and XMLs into structured JSON content-list files.
@@ -156,8 +156,9 @@ def transform_text(
     publications : list[Publication]
         Output of download_corpus(). Publications without a local file
         (publication_filepath is None) are silently skipped.
-    mineru_endpoint : {"local", "vllm"}, default "local"
-        "local" runs MinerU on the local GPU.
+    mineru_backend : {"local-gpu", "local-cpu", "vllm"}, default "local-gpu"
+        "local-gpu" runs MinerU on the local CUDA GPU (requires PyTorch + CUDA).
+        "local-cpu" runs MinerU on CPU only — slower but no GPU required.
         "vllm" delegates PDF inference to the remote vLLM server configured via
         MINERU_VLLM_ENDPOINT and MINERU_API_KEY in secrets.env (both are validated
         before the run starts).
@@ -175,8 +176,8 @@ def transform_text(
     from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
     from text_transformation.visualisation.conversion_report import build_conversion_report
 
-    # Pre-transformation checks (affirms vLLM secrets are filled when mineru_endpoint="vllm").
-    prepare_bulk_transformation(mineru_endpoint=mineru_endpoint)
+    # Pre-transformation checks (affirms vLLM secrets are filled when mineru_backend="vllm").
+    prepare_bulk_transformation(mineru_backend=mineru_backend)
 
     # Send publications to text transformation controller to categorize them for processing based on cached state.
     controller = Controller(publication_list=publications)
@@ -189,7 +190,7 @@ def transform_text(
     logging.info(f"Gathered {len(pdfs_to_process)} .PDF files to parse into JSON format.")
 
     ElsevierXmlTransformer(publication_list=xmls_to_process).transform_all()
-    MinerUPdfTransformer(publication_list=pdfs_to_process, mineru_endpoint=mineru_endpoint).transform_all()
+    MinerUPdfTransformer(publication_list=pdfs_to_process, mineru_backend=mineru_backend).transform_all()
 
     build_conversion_report(
         newly_converted=controller.needs_transformation,
@@ -230,10 +231,11 @@ def standardise_text(
     keep_latex : bool, default False
         When False, inline and block equations are replaced with a placeholder.
     keep_references : bool, default False
-        When False, the references section and everything after it is removed.
+        When False, an attempt is made to remove the references section from the paper.
     force_imrad_structure : bool, default True
         When True, section headings are normalised to Introduction / Methods /
-        Results / Discussion using regex matching with an LLM fallback.
+        Results / Discussion using regex matching with an LLM fallback. Paper boilerplate sections are parsed to a
+        classifier to decide whether to remove each section.
 
     Returns
     -------
@@ -294,7 +296,7 @@ if __name__ == "__main__":
     logging.info("Corpus download completed.")
 
     # Convert.
-    publications = transform_text(publications)
+    publications = transform_text(publications, mineru_backend="local-gpu")
     logging.info("Corpus transformation completed.")
 
     # Standardise.

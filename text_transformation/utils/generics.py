@@ -4,50 +4,52 @@ import sqlite3
 from pathlib import Path
 from config import JSON_STRUCT_DIR, FINAL_MARKDOWN_DIR, BASE_DIR, DB_CACHE_FILE_NAME
 
-MINERU_ENDPOINT_CHOICES = ("local", "vllm")
+MINERU_BACKEND_CHOICES = ("local-gpu", "local-cpu", "vllm")
 
-def prepare_bulk_transformation(mineru_endpoint: str = "local") -> None:
+def prepare_bulk_transformation(mineru_backend: str = "local-gpu") -> None:
     """
     Carries out pre-flight checks before launching the text-transformation pipeline.
 
     Parameters
     ----------
-    mineru_endpoint : str - "local" runs MinerU inference on the local GPU (default);
-        "vllm" sends inference to the remote vLLM server configured in secrets.env,
-        in which case no local GPU is required.
+    mineru_backend : str - "local-gpu" runs MinerU on the local CUDA GPU (default);
+        "local-cpu" runs MinerU on CPU only (no GPU required, slower);
+        "vllm" sends inference to the remote vLLM server configured in secrets.env.
 
     Raises
     ------
-    ValueError - If mineru_endpoint is not a recognised choice, or if
-        mineru_endpoint="vllm" and MINERU_VLLM_ENDPOINT / MINERU_API_KEY are unset.
+    ValueError - If mineru_backend is not a recognised choice, or if
+        mineru_backend="vllm" and MINERU_VLLM_ENDPOINT / MINERU_API_KEY are unset.
     FileNotFoundError - If the mineru executable cannot be located.
-    RuntimeError - If mineru_endpoint="local" and no CUDA-capable GPU is recognized by PyTorch.
+    RuntimeError - If mineru_backend="local-gpu" and no CUDA-capable GPU is recognized by PyTorch.
     """
-    if mineru_endpoint not in MINERU_ENDPOINT_CHOICES:
+    if mineru_backend not in MINERU_BACKEND_CHOICES:
         raise ValueError(
-            f"Invalid mineru_endpoint: {mineru_endpoint!r}. "
-            f"Allowed values: {', '.join(MINERU_ENDPOINT_CHOICES)}."
+            f"Invalid mineru_backend: {mineru_backend!r}. "
+            f"Allowed values: {', '.join(MINERU_BACKEND_CHOICES)}."
         )
 
     check_transformation_filepaths()
     check_cache_for_markdowns()
 
-    if mineru_endpoint == "vllm":
+    if mineru_backend == "vllm":
         check_vllm_config()
         if not check_gpu():
             logging.warning(
                 "No local GPU recognised — proceeding anyway as MinerU inference "
                 "is delegated to the remote vLLM endpoint."
             )
-    elif not check_gpu():
+    elif mineru_backend == "local-gpu" and not check_gpu():
         raise RuntimeError("No GPU recognised by PyTorch. Cannot proceed.")
+    elif mineru_backend == "local-cpu":
+        logging.info("CPU mode selected — skipping GPU check.")
     check_mineru()
 
 
 def check_vllm_config() -> None:
     """
     Affirms that the remote MinerU vLLM settings are filled in secrets.env.
-    Required before running transform_text(mineru_endpoint="vllm").
+    Required before running transform_text(mineru_backend="vllm").
 
     Raises
     ------
@@ -64,7 +66,7 @@ def check_vllm_config() -> None:
     ]
     if missing:
         raise ValueError(
-            f"mineru_endpoint='vllm' requires {' and '.join(missing)} to be set in secrets.env."
+            f"mineru_backend='vllm' requires {' and '.join(missing)} to be set in secrets.env."
         )
     logging.info(f"MinerU remote inference configured: {MINERU_VLLM_ENDPOINT}")
 

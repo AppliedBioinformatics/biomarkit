@@ -32,17 +32,17 @@ def test_init_sets_output_dir_to_raw_markdown_dir():
     assert converter.output_dir == JSON_STRUCT_DIR
 
 
-def test_init_defaults_to_local_endpoint():
+def test_init_defaults_to_local_gpu():
     from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
     converter = MinerUPdfTransformer(publication_list=[])
-    assert converter.mineru_endpoint == "local"
+    assert converter.mineru_backend == "local-gpu"
 
 
 def test_init_rejects_unknown_endpoint():
     import pytest
     from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
-    with pytest.raises(ValueError, match="Invalid mineru_endpoint"):
-        MinerUPdfTransformer(publication_list=[], mineru_endpoint="remote")
+    with pytest.raises(ValueError, match="Invalid mineru_backend"):
+        MinerUPdfTransformer(publication_list=[], mineru_backend="remote")
 
 
 # ---------------------------------------------------------------------------
@@ -66,7 +66,7 @@ def test_build_output_path_uses_vlm_subdir_for_vllm_endpoint(tmp_path):
     from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
     pub = _make_pub("10.1000/A", tmp_path)
     stem = pub.publication_filepath.stem
-    converter = MinerUPdfTransformer(publication_list=[pub], mineru_endpoint="vllm")
+    converter = MinerUPdfTransformer(publication_list=[pub], mineru_backend="vllm")
     converter.output_dir = tmp_path
 
     result = converter._build_output_path(pub)
@@ -146,7 +146,7 @@ def test_convert_all_vllm_uses_http_client_backend(tmp_path):
     from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pub = _make_pub("10.1000/R", tmp_path)
-    converter = MinerUPdfTransformer(publication_list=[pub], mineru_endpoint="vllm")
+    converter = MinerUPdfTransformer(publication_list=[pub], mineru_backend="vllm")
     converter.output_dir = tmp_path
 
     captured = {}
