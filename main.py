@@ -308,7 +308,7 @@ if __name__ == "__main__":
     logging.info("Corpus download completed.")
 
     # Convert.
-    publications = transform_text(publications, mineru_backend="local-gpu", mineru_batch_size=25)
+    publications = transform_text(publications, mineru_backend="local-cpu", mineru_batch_size=25)
     logging.info("Corpus transformation completed.")
 
     # Standardise.
