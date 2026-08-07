@@ -5,19 +5,17 @@ from text_download.apis.clients.wiley import WileyClient
 from config import TMP_DIR
 from pathlib import Path
 
-def test_wiley_client_init(publications, caplog):
+def test_wiley_client_init(publications):
     fake_tdm_client = MagicMock()
 
     with patch("text_download.apis.clients.wiley.TDMClient", return_value=fake_tdm_client) as mock_tdm, \
          patch("text_download.apis.clients.wiley.WILEY_TDM_TOKEN", "test_token"):
 
-        with caplog.at_level("INFO"):
-            client = WileyClient(publication_list=publications)
+        client = WileyClient(publication_list=publications)
 
         # Check that connect_wiley_tdm was called via __init__
         mock_tdm.assert_called_once_with(api_token="test_token", download_dir=TMP_DIR)
         assert client.wiley_client == fake_tdm_client
-        assert "Connected to Wiley via TDM." in caplog.text
 
 def test_wiley_client_missing_token(publications):
     # Patch the token to None
@@ -54,7 +52,7 @@ def test_download_paper_failure_status(publications, caplog):
     client = WileyClient(publication_list=publications)
     client.wiley_client.download_pdf = MagicMock(return_value=fake_result)
 
-    with caplog.at_level("INFO"):
+    with caplog.at_level("INFO", logger=client.logger.name):
         result = client.download_paper(doi)
 
     assert result is None
@@ -88,7 +86,7 @@ def test_download_paper_success(publications, caplog):
     client._move_file = MagicMock(return_value=fake_filepath)
 
     with patch("pathlib.Path.exists", return_value=True):
-        with caplog.at_level("INFO"):
+        with caplog.at_level("INFO", logger=client.logger.name):
             result = client.download_paper(doi)
 
     # Assert the returned filepath

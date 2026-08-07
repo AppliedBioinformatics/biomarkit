@@ -4,7 +4,10 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from tqdm import tqdm
+
 from text_download.basemodels.publication import Publication
+from text_download.utils.generics import progress_split_bar
 from standardisation.content_list.schema import (
     Document, TitleBlock, TitleContent, TextSpan, ParagraphBlock,
 )
@@ -170,7 +173,7 @@ class Cleaner:
     def _find_introduction_start(self, blocks) -> list:
         for block in blocks:
             if isinstance(block, TitleBlock) and self._is_intro_heading(block):
-                logging.info("[Cleaner] Introduction found via regex")
+                logging.debug("[Cleaner] Introduction found via regex")
                 self._rename_heading(block, "Introduction")
                 return blocks
 
@@ -181,7 +184,7 @@ class Cleaner:
 
         intro_index = LlamaClassifier().classify_intro(blocks_context)
         if intro_index is not None:
-            logging.info("[Cleaner] Introduction found via LLM at block index %d", intro_index)
+            logging.debug("[Cleaner] Introduction found via LLM at block index %d", intro_index)
             return self._insert_intro_heading(blocks, intro_index)
 
         logging.warning("[Cleaner] find_introduction_start: LLM could not identify introduction")
@@ -195,7 +198,7 @@ class Cleaner:
 
         end_index = LlamaClassifier().classify_end(blocks_context)
         if end_index is not None:
-            logging.info("[Cleaner] Core text end found via LLM at block index %d", end_index)
+            logging.debug("[Cleaner] Core text end found via LLM at block index %d", end_index)
             return self._insert_end_marker(blocks, end_index)
 
         logging.warning("[Cleaner] find_core_text_end: LLM could not identify end of core text")
@@ -208,14 +211,14 @@ class Cleaner:
         methods_found = False
         for block in blocks:
             if isinstance(block, TitleBlock) and self._is_methods_heading(block):
-                logging.info("[Cleaner] Methods heading found via regex")
+                logging.debug("[Cleaner] Methods heading found via regex")
                 self._rename_heading(block, "Methods")
                 methods_found = True
                 break
         if not methods_found and headings_context:
             idx = LlamaClassifier().classify_methods(headings_context)
             if idx is not None and isinstance(blocks[idx], TitleBlock):
-                logging.info("[Cleaner] Methods heading found via LLM at block index %d", idx)
+                logging.debug("[Cleaner] Methods heading found via LLM at block index %d", idx)
                 self._rename_heading(blocks[idx], "Methods")
                 methods_found = True
         if not methods_found:
@@ -228,19 +231,19 @@ class Cleaner:
             if not isinstance(block, TitleBlock):
                 continue
             if self._is_results_and_discussion_heading(block):
-                logging.info("[Cleaner] Combined Results and Discussion heading found via regex")
+                logging.debug("[Cleaner] Combined Results and Discussion heading found via regex")
                 results_found = True
                 discussion_found = True
                 break
             if self._is_results_heading(block):
-                logging.info("[Cleaner] Results heading found via regex")
+                logging.debug("[Cleaner] Results heading found via regex")
                 self._rename_heading(block, "Results")
                 results_found = True
                 break
         if not results_found and headings_context:
             idx = LlamaClassifier().classify_results(headings_context)
             if idx is not None and isinstance(blocks[idx], TitleBlock):
-                logging.info("[Cleaner] Results heading found via LLM at block index %d", idx)
+                logging.debug("[Cleaner] Results heading found via LLM at block index %d", idx)
                 self._rename_heading(blocks[idx], "Results")
                 results_found = True
         if not results_found:
@@ -250,17 +253,17 @@ class Cleaner:
         if not discussion_found:
             for block in blocks:
                 if isinstance(block, TitleBlock) and self._is_discussion_heading(block):
-                    logging.info("[Cleaner] Discussion heading found via regex")
+                    logging.debug("[Cleaner] Discussion heading found via regex")
                     self._rename_heading(block, "Discussion")
                     discussion_found = True
                     break
             if not discussion_found and headings_context:
                 idx = LlamaClassifier().classify_discussion(headings_context)
                 if idx is not None and isinstance(blocks[idx], TitleBlock):
-                    logging.info("[Cleaner] Discussion heading found via LLM at block index %d", idx)
+                    logging.debug("[Cleaner] Discussion heading found via LLM at block index %d", idx)
                     self._rename_heading(blocks[idx], "Discussion")
                 else:
-                    logging.info("[Cleaner] enforce_imrad_headings: no Discussion heading found (optional)")
+                    logging.debug("[Cleaner] enforce_imrad_headings: no Discussion heading found (optional)")
 
         return blocks
 
@@ -342,5 +345,14 @@ class Cleaner:
         Returns:
             None
         """
-        for publication in self.publications:
-            self.clean_from_json(pub=publication)
+        total = len(self.publications)
+        success, failed = 0, 0
+        with tqdm(self.publications, desc="Standardising", unit="pub",
+                  leave=True, dynamic_ncols=True) as bar:
+            for publication in bar:
+                self.clean_from_json(pub=publication)
+                if publication.final_md_filepath is not None:
+                    success += 1
+                else:
+                    failed += 1
+                bar.set_postfix_str(progress_split_bar(success, failed, total))

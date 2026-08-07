@@ -6,47 +6,27 @@ from pathlib import Path
 from text_download.basemodels.publication import Publication
 
 # High-level functions.
-def create_corpus(name: str) -> Path:
+def build_new_corpus(name: str, scopus_file: str | Path, set_active: bool = True) -> Path:
     """
-    Creates the folder structure for a new corpus at corpora/<name>.
-
-    Builds the empty corpus subfolders (manuscripts, markdowns, results, reports, logs).
-    The Scopus export must then be placed inside the corpus folder as scopus.csv, and
-    CORPUS_NAME in config.py set to <name>, before running the pipeline. Safe to call
-    on an existing corpus — existing contents are left untouched.
+    Creates the folder structure for a new corpus and copies the Scopus CSV into it.
 
     Parameters
     ----------
-    name : str - Folder name for the new corpus.
+    name : str
+        Folder name for the new corpus (no path separators).
+    scopus_file : str | Path
+        Path to the Scopus export CSV to seed the corpus with.
+    set_active : bool, default True
+        When True, writes CORPUS_NAME=<name> into secrets.env so subsequent
+        pipeline calls target this corpus without any manual edits.
 
     Returns
     -------
-    Path - Path to the corpus folder.
+    Path
+        Path to the newly created corpus folder.
     """
-    from config import (
-        CORPORA_DIR, DOWNLOAD_DIR, JSON_STRUCT_DIR, FINAL_MARKDOWN_DIR, REPORT_DIR, LOG_DIR, SCOPUS_INPUT_CSV_NAME
-    )
-
-    name = name.strip()
-    if not name or set('\\/:*?"<>|') & set(name):
-        raise ValueError(
-            f"Invalid corpus name: {name!r}. Use a plain folder name without path separators."
-        )
-
-    corpus_dir = CORPORA_DIR / name
-    if corpus_dir.exists():
-        logging.warning(f"Corpus '{name}' already exists at {corpus_dir} — leaving existing contents untouched.")
-
-    for subdir_name in (
-            DOWNLOAD_DIR.name, JSON_STRUCT_DIR.name, FINAL_MARKDOWN_DIR.name, REPORT_DIR.name, LOG_DIR.name,
-    ):
-        (corpus_dir / subdir_name).mkdir(parents=True, exist_ok=True)
-
-    logging.info(
-        f"Corpus '{name}' ready at {corpus_dir}. Place your Scopus export there as "
-        f"'{SCOPUS_INPUT_CSV_NAME.name}' and set CORPUS_NAME = \"{name}\" in config.py to use it."
-    )
-    return corpus_dir
+    from text_download.utils.generics import build_new_corpus as _build_new_corpus
+    return _build_new_corpus(name=name, scopus_file=scopus_file, set_active=set_active)
 
 def download_corpus(check_opensource: bool = True, generate_report: bool = False) -> list[Publication]:
     """
@@ -270,11 +250,11 @@ def standardise_text(
             "force_imrad_structure=False to use regex-only heading detection."
         )
 
-    logging.info("Preflight checks passed. Proceeding with standardisation.")
+    logging.debug("Preflight checks passed. Proceeding with standardisation.")
 
     # Get only publications that have not already been standardised (final_md_filepath is not set in the cache).
     publications = [p for p in publications if p.content_json_filepath is not None]
-    logging.info(f"standardise_text: {len(publications)} publications have raw markdown files.")
+    logging.debug(f"standardise_text: {len(publications)} publications have raw markdown files.")
 
     # Build the custom instructions for the Cleaner class.
     context = {"keep_figures": keep_figures,
@@ -308,11 +288,11 @@ if __name__ == "__main__":
     logging.info("Corpus download completed.")
 
     # Convert.
-    publications = transform_text(publications, mineru_backend="local-gpu", mineru_batch_size=10)
-    logging.info("Corpus transformation completed.")
+    publications = transform_text(publications, mineru_backend="local-gpu", mineru_batch_size=5)
+    logging.debug("Corpus transformation completed.")
 
     # Standardise.
-    logging.info("Conversion of first paper may take longer due to model weight download.")
+    logging.debug("Conversion of first paper may take longer due to model weight download.")
     standardise_text(publications,
                      keep_latex=True,
                      keep_tables=True,

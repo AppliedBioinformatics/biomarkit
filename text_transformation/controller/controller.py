@@ -18,7 +18,7 @@ class Controller:
     """
 
     def __init__(self, publication_list: List[Publication]):
-        logging.info("Attempting to instantiate text_transformation Controller.")
+        logging.debug("Attempting to instantiate text_transformation Controller.")
 
         self.publications = publication_list
         self.cache = config.DB_CACHE_FILE_NAME
@@ -28,12 +28,12 @@ class Controller:
         self.completed: List[Publication] = []
 
         self._check_cache()
-        logging.info("Successfully instantiated text_transformation Controller.")
+        logging.debug("Successfully instantiated text_transformation Controller.")
 
     def _check_cache(self) -> None:
         """Create or load the database cache file."""
         if self.cache.exists():
-            logging.info(f"Loading existing cache from {self.cache}")
+            logging.debug(f"Loading existing cache from {self.cache}")
         else:
             logging.info(f"Cache not found at {self.cache}, creating a new one...")
             create_database(self.cache)
@@ -43,7 +43,7 @@ class Controller:
         Removes publications with is_cached == False from self.publications before any
         cache cross-referencing begins. Discarded publications are logged as warnings.
         """
-        logging.info("Filtering out uncached publications.")
+        logging.debug("Filtering out uncached publications.")
         cached, discarded = [], []
         for pub in self.publications:
             (cached if pub.is_cached else discarded).append(pub)
@@ -62,7 +62,7 @@ class Controller:
         Logs a warning for any publication whose cache row has no publication_filepath
         (this should not occur under normal operation).
         """
-        logging.info("Cross-referencing publication objects with cache.")
+        logging.debug("Cross-referencing publication objects with cache.")
         for pub in self.publications:
             row = get_row_for_doi(pub.doi, db_path=self.cache)
             if row is None:
@@ -77,7 +77,7 @@ class Controller:
             pub.content_json_filepath = Path(row["content_json_filepath"]) if row.get("content_json_filepath") else None
             pub.final_md_filepath = Path(row["final_md_filepath"]) if row.get("final_md_filepath") else None
 
-        logging.info("Finished updating publication filepath states from cache.")
+        logging.debug("Finished updating publication filepath states from cache.")
 
     def _update_document_types(self) -> None:
         """

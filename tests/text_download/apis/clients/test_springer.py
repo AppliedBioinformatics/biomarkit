@@ -16,7 +16,7 @@ def test_download_paper_failure(publications, caplog):
     with patch.object(client, "_build_download_filepath", return_value=fake_filepath), \
             patch.object(client, "_attempt_download", return_value=False):
 
-        with caplog.at_level("INFO"):
+        with caplog.at_level("INFO", logger=client.logger.name):
             result = client.download_paper(doi)
 
         assert result is None

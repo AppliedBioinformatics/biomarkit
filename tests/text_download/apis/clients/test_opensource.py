@@ -33,7 +33,7 @@ def test__get_pdf_url_attribute_error(publications, caplog):
         mock_response.json.return_value = {}
         mock_get.return_value = mock_response
 
-        with caplog.at_level("INFO"):
+        with caplog.at_level("INFO", logger=api.logger.name):
             result = api._get_pdf_url(doi)
             assert result is None
             assert "Unable to retrieve url for DOI" in caplog.text
@@ -46,7 +46,7 @@ def test__get_pdf_url_request_exception(publications, caplog):
     with patch("text_download.apis.clients.opensource.requests.get") as mock_get:
         mock_get.side_effect = RequestException("Network error")
 
-        with caplog.at_level("INFO"):
+        with caplog.at_level("INFO", logger=api.logger.name):
             result = api._get_pdf_url(doi)
             assert result is None
             assert "Unable to retrieve url for DOI" in caplog.text
@@ -56,7 +56,7 @@ def test_download_paper_no_link(publications, caplog):
     doi = "10.1234/testdoi"
 
     with patch.object(api, "_get_pdf_url", return_value=None):
-        with caplog.at_level("INFO"):
+        with caplog.at_level("INFO", logger=api.logger.name):
             result = api.download_paper(doi)
             assert result is None
             assert f"No open access URL found for DOI: {doi}" in caplog.text
@@ -71,7 +71,7 @@ def test_download_paper_fails(publications, caplog):
             patch.object(api, "_build_download_filepath", return_value=fake_filepath), \
             patch.object(api, "_attempt_download", return_value=False):
 
-        with caplog.at_level("INFO"):
+        with caplog.at_level("INFO", logger=api.logger.name):
             result = api.download_paper(doi)
             assert result is None
 
@@ -85,7 +85,7 @@ def test_download_paper_success(publications, caplog):
             patch.object(api, "_build_download_filepath", return_value=fake_filepath), \
             patch.object(api, "_attempt_download", return_value=True):
 
-        with caplog.at_level("INFO"):
+        with caplog.at_level("INFO", logger=api.logger.name):
             result = api.download_paper(doi)
             assert result == fake_filepath
             assert f"Paper downloaded for DOI: {doi} at filepath: {fake_filepath}" in caplog.text
@@ -200,7 +200,7 @@ def test__try_chemrxiv_no_item(publications, caplog):
     doi = "10.26434/chemrxiv-2021-np90x"
 
     with patch.object(api, "_get_chemrxiv_item", return_value=None):
-        with caplog.at_level("INFO"):
+        with caplog.at_level("INFO", logger=api.logger.name):
             assert api._try_chemrxiv(doi) is None
             assert f"ChemRxiv API returned no item for DOI: {doi}" in caplog.text
 

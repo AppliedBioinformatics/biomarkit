@@ -65,7 +65,7 @@ class ApiRouter:
         -------
         Dict[str, List[Publication]]
         """
-        logging.info("Grouping publications by publisher.")
+        logging.debug("Grouping publications by publisher.")
         sorted_pubs: Dict[str, List[Publication]] = defaultdict(list)
 
         for pub in publications:
@@ -105,7 +105,7 @@ class ApiRouter:
             n_pubs = len(publisher.publication_list)
             logging.info(f"Starting client for {publisher.name}: Will attempt download for {n_pubs}.")
             publisher.download_all_papers()
-            logging.info(f"Finished attempting downloads for {publisher.name}.")
+            logging.debug(f"Finished attempting downloads for {publisher.name}.")
             return publisher.publication_list
 
         except Exception as e:
@@ -128,7 +128,7 @@ class ApiRouter:
         -------
         List[List[Publication]]
         """
-        logging.info(f"Launching {len(client_list)} clients with up to {max_threads} parallel threads...")
+        logging.debug(f"Launching {len(client_list)} clients with up to {max_threads} parallel threads...")
         results = {}
 
         with ThreadPoolExecutor(max_workers=max_threads) as executor:
@@ -140,14 +140,14 @@ class ApiRouter:
                 try:
                     result = future.result()
                     results[pub.name] = result
-                    logging.info(f"{pub.name} completed with {len(result)} publications.")
+                    logging.debug(f"{pub.name} completed with {len(result)} publications.")
 
                 except Exception as e:
                     logging.error(f"Unhandled exception in {pub.name}: {e}")
                     results[pub.name] = []
 
 
-        logging.info("All publisher clients finished.")
+        logging.debug("All publisher clients finished.")
         return results
 
     # Methods.
@@ -166,9 +166,9 @@ class ApiRouter:
 
         if self.try_opensource:
 
-            logging.info("Attempting to spawn open-source API client node.")
+            logging.debug("Attempting to spawn open-source API client node.")
             os_client = OpenSourceClient(publication_list=self.publication_list)
-            logging.info("Spawned open-source API client node.")
+            logging.debug("Spawned open-source API client node.")
             logging.info(f"Attempting to download {len(self.publication_list)} papers via open-source routes.")
 
             if len(self.publication_list) == 0:
@@ -176,7 +176,7 @@ class ApiRouter:
 
             # Attempt to download all the papers, papers are added to the cache once downloaded.
             os_client.download_all_papers()
-            logging.info("Open-source client node signalled all download attempts completed.")
+            logging.debug("Open-source client node signalled all download attempts completed.")
 
             self.finished_publications =  [pub for pub in os_client.publication_list if pub.is_cached]
             logging.debug(f"Added {len(self.finished_publications)} publications to self.finished_publications.")
@@ -194,7 +194,7 @@ class ApiRouter:
         """
 
         # Sort all publications without a filepath into a dictionary of lists.
-        logging.info("Separating publications that could not be downloaded via open-source routes.")
+        logging.debug("Separating publications that could not be downloaded via open-source routes.")
         pubs_for_attempt = [pub for pub in self.publication_list if pub.publication_filepath is None]
 
         # Sort unfinished publications and route to relative API clients for attempting download.
@@ -208,12 +208,12 @@ class ApiRouter:
                 self.unfinished_publications.extend(pub_list)
 
         # Attempt to download from specific APIs:
-        logging.info(f"Spawning client nodes and appending relative publications to publisher.publication_list...")
+        logging.debug(f"Spawning client nodes and appending relative publications to publisher.publication_list...")
         node_list = self._map_to_nodes(pub_dict=pubs_by_publisher, client_mapper=api_clients)
         logging.info(f"Successfully generated list of {len(node_list)} client nodes.")
-        logging.info("Attempting downloads in parallel...")
+        logging.debug("Attempting downloads in parallel...")
         results = self._download_in_parallel(client_list=node_list, max_threads=MAX_THREADS)
-        logging.info(f"Parallel downloads finished. Finalising...")
+        logging.debug(f"Parallel downloads finished. Finalising...")
 
         return results
 

@@ -7,19 +7,71 @@ from typing import List, Optional
 from pydantic import FilePath
 from plotly import graph_objects as go, io as pio
 from collections import defaultdict
+from tqdm import tqdm
 from text_download.basemodels.publication import Publication
 from text_download.database.database import create_database
 from config import LOG_DIR, DOWNLOAD_DIR, REPORT_DIR, DB_CACHE_FILE_NAME, SCOPUS_INPUT_CSV_NAME
+
+
+class _TqdmLoggingHandler(logging.Handler):
+    """Routes log records through tqdm.write so active bars aren't interrupted."""
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            tqdm.write(self.format(record))
+        except Exception:
+            self.handleError(record)
 
 
 def _secrets_path() -> Path:
     return Path(__file__).resolve().parents[2] / "secrets.env"
 
 
+def create_corpus(name: str) -> Path:
+    """
+    Creates the folder structure for a new corpus at corpora/<name>.
+
+    Builds the empty corpus subfolders (manuscripts, intermediates, results, reports, logs).
+    Safe to call on an existing corpus — existing contents are left untouched.
+
+    Parameters
+    ----------
+    name : str
+        Folder name for the new corpus (no path separators).
+
+    Returns
+    -------
+    Path
+        Path to the corpus folder.
+    """
+    from config import (
+        CORPORA_DIR, DOWNLOAD_DIR, JSON_STRUCT_DIR, FINAL_MARKDOWN_DIR, REPORT_DIR, LOG_DIR, SCOPUS_INPUT_CSV_NAME
+    )
+
+    name = name.strip()
+    if not name or set('\\/:*?"<>|') & set(name):
+        raise ValueError(
+            f"Invalid corpus name: {name!r}. Use a plain folder name without path separators."
+        )
+
+    corpus_dir = CORPORA_DIR / name
+    if corpus_dir.exists():
+        logging.warning(f"Corpus '{name}' already exists at {corpus_dir} — leaving existing contents untouched.")
+
+    for subdir_name in (
+        DOWNLOAD_DIR.name, JSON_STRUCT_DIR.name, FINAL_MARKDOWN_DIR.name, REPORT_DIR.name, LOG_DIR.name,
+    ):
+        (corpus_dir / subdir_name).mkdir(parents=True, exist_ok=True)
+
+    logging.info(
+        f"Corpus '{name}' ready at {corpus_dir}. Place your Scopus export there as "
+        f"'{SCOPUS_INPUT_CSV_NAME.name}' and set CORPUS_NAME = \"{name}\" in secrets.env to use it."
+    )
+    return corpus_dir
+
+
 def build_new_corpus(name: str, scopus_file: "str | Path", set_active: bool = True) -> Path:
     """
     Creates the folder structure for a new corpus and copies the Scopus CSV into it.
-    Delegates folder creation to main.create_corpus.
 
     Parameters
     ----------
@@ -38,7 +90,6 @@ def build_new_corpus(name: str, scopus_file: "str | Path", set_active: bool = Tr
     """
     import re
     import shutil
-    from main import create_corpus
 
     scopus_src = Path(scopus_file)
     if not scopus_src.exists():
@@ -75,10 +126,23 @@ def build_new_corpus(name: str, scopus_file: "str | Path", set_active: bool = Tr
 def setup_logging(level=logging.INFO):
     """
     This function should be called at the beginning of main() to set up logging configuration.
+    Routes console output through tqdm.write so active progress bars aren't interrupted.
     """
-    logging.basicConfig(level=level, format='%(asctime)s - %(levelname)s - %(message)s')
-    logging.info("SETUP - Completed setting up logging.")
+    root = logging.getLogger()
+    root.setLevel(level)
 
+    # Remove any existing console (StreamHandler) handlers, keeping FileHandlers.
+    root.handlers = [h for h in root.handlers if isinstance(h, logging.FileHandler)]
+
+    handler = _TqdmLoggingHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+    root.addHandler(handler)
+
+    # Silence third-party per-item info logs that clutter the console.
+    logging.getLogger("wiley_tdm").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+    logging.debug("SETUP - Completed setting up logging.")
     if level == logging.DEBUG:
         logging.debug("Running programme in DEBUG mode.")
 
@@ -114,7 +178,7 @@ def clean_publications(folder: Path = DOWNLOAD_DIR, db_path: Path = DB_CACHE_FIL
 
     # Store tracked paths in a set for faster lookup
     tracked_files = {Path(row[0]) for row in cursor.fetchall()}
-    logging.info(f"SETUP - Found {len(tracked_files)} publications stored in cache.")
+    logging.debug(f"SETUP - Found {len(tracked_files)} publications stored in cache.")
     conn.close()
 
     # Delete file if not stored in cache.
@@ -214,6 +278,31 @@ def build_plotly_report(figures: List[go.Figure], output_file: str, title: Optio
 
     print(f"Report saved to {output_file}")
     return html_template
+
+_ANSI_GREEN = "\033[32m"
+_ANSI_RED   = "\033[31m"
+_ANSI_RESET = "\033[0m"
+
+
+def progress_split_bar(success: int, failed: int, total: int, width: int = 20) -> str:
+    """
+    Returns an ANSI-coloured ASCII bar split across `width` characters:
+      Green █  = successful so far
+      Red   █  = failed so far
+      Grey  ░  = not yet attempted
+    Proportions are relative to `total` (all items, including pending).
+    """
+    if total == 0:
+        return "░" * width
+    green_cells = round(success / total * width)
+    red_cells   = min(round(failed / total * width), width - green_cells)
+    pending     = width - green_cells - red_cells
+    return (
+        f"{_ANSI_GREEN}{'█' * green_cells}{_ANSI_RESET}"
+        f"{_ANSI_RED}{'█' * red_cells}{_ANSI_RESET}"
+        f"{'░' * pending}"
+    )
+
 
 def truncate_labels(label: str) -> str:
     return label if len(label) <= 50 else label[:47] + "…"

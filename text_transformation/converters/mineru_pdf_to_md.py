@@ -10,8 +10,11 @@ import tempfile
 from pathlib import Path
 from typing import List
 
+from tqdm import tqdm
+
 from config import MINERU_VIRTUAL_VRAM_SIZE, MINERU_VLLM_ENDPOINT, MINERU_API_KEY
 from text_download.basemodels.publication import Publication
+from text_download.utils.generics import progress_split_bar
 from text_transformation.converters.ABC.transformer import Transformer
 from text_transformation.utils.generics import check_mineru, MINERU_BACKEND_CHOICES
 
@@ -79,11 +82,18 @@ class MinerUPdfTransformer(Transformer):
             chunk_size = self.batch_size if self.batch_size is not None else len(pending)
             chunks = [pending[i:i + chunk_size] for i in range(0, max(len(pending), 1), chunk_size)]
             total_chunks = len(chunks)
-            for idx, chunk in enumerate(chunks, start=1):
-                if chunk:
-                    logging.info(f"MinerU batch chunk {idx}/{total_chunks} ({len(chunk)} PDF(s)).")
-                    self._run_mineru_batch(chunk)
-                    self._cache_chunk(chunk)
+            succeeded, failed = 0, 0
+            with tqdm(enumerate(chunks, start=1), desc="MinerU batches", total=total_chunks,
+                      unit="batch", leave=True, dynamic_ncols=True) as bar:
+                for idx, chunk in bar:
+                    if chunk:
+                        logging.debug(f"MinerU batch chunk {idx}/{total_chunks} ({len(chunk)} PDF(s)).")
+                        self._run_mineru_batch(chunk)
+                        self._cache_chunk(chunk)
+                        chunk_ok = sum(1 for p in chunk if p.content_json_filepath is not None)
+                        succeeded += chunk_ok
+                        failed += len(chunk) - chunk_ok
+                    bar.set_postfix_str(progress_split_bar(succeeded, failed, len(pending)))
         super().transform_all()
 
     def _build_batch_command(self, staging_dir: Path) -> list[str]:

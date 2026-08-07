@@ -41,5 +41,5 @@ def prepare_standardisation() -> bool:
         )
         return False
 
-    logging.info(f"SETUP - LLM classifier ready: '{LLM_MODEL_NAME}' available at {LLM_BASE_URL}.")
+    logging.debug(f"SETUP - LLM classifier ready: '{LLM_MODEL_NAME}' available at {LLM_BASE_URL}.")
     return True

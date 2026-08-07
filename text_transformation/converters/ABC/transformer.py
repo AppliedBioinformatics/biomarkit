@@ -3,9 +3,12 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import List
 
+from tqdm import tqdm
+
 from config import DB_CACHE_FILE_NAME, JSON_STRUCT_DIR
 from text_download.basemodels.publication import Publication
 from text_download.database.database import update_content_json_filepath
+from text_download.utils.generics import progress_split_bar
 
 
 class Transformer(ABC):
@@ -74,7 +77,7 @@ class Transformer(ABC):
             content_json_filepath=str(pub.content_json_filepath),
             db_path=self.cache,
         )
-        logging.info(f"Cache updated with content_json_filepath for {pub.doi}.")
+        logging.debug(f"Cache updated with content_json_filepath for {pub.doi}.")
 
     def transform_all(self) -> None:
         """
@@ -90,24 +93,30 @@ class Transformer(ABC):
         logging.info(f"{self.__class__.__name__} starting transformation of {total} publication(s).")
 
         passed, failed = 0, 0
-        for i, pub in enumerate(self.publication_list, start=1):
-            if pub.content_json_filepath is not None:
-                passed += 1
-                continue
-            logging.info(f"Transforming publication {i}/{total}: {pub.doi}.")
-            try:
-                result = self.transform2json(pub)
-                if result is None:
-                    logging.warning(f"Transformation returned None for {pub.doi} — skipping.")
-                    failed += 1
+        with tqdm(self.publication_list, desc=self.__class__.__name__, unit="pub",
+                  leave=True, dynamic_ncols=True) as bar:
+            for pub in bar:
+                if pub.content_json_filepath is not None:
+                    passed += 1
+                    bar.set_postfix_str(progress_split_bar(passed, failed, total))
                     continue
-                pub.content_json_filepath = result
-                self._cache_result(pub)
-                passed += 1
+                logging.debug(f"Transforming: {pub.doi}.")
+                try:
+                    result = self.transform2json(pub)
+                    if result is None:
+                        logging.warning(f"Transformation returned None for {pub.doi} — skipping.")
+                        failed += 1
+                        bar.set_postfix_str(progress_split_bar(passed, failed, total))
+                        continue
+                    pub.content_json_filepath = result
+                    self._cache_result(pub)
+                    passed += 1
 
-            except Exception as e:
-                logging.warning(f"Transformation failed for {pub.doi}: {e} — skipping.")
-                failed += 1
+                except Exception as e:
+                    logging.warning(f"Transformation failed for {pub.doi}: {e} — skipping.")
+                    failed += 1
+
+                bar.set_postfix_str(progress_split_bar(passed, failed, total))
 
         logging.info(
             f"{self.__class__.__name__} finished — {passed} succeeded, {failed} failed."

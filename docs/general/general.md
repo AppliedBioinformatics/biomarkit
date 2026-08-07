@@ -1,13 +1,26 @@
 # Documentation for general usage.
 
 ----
-## Installation.
+## Installation and Setup.
 The easiest way to install the package is using [pip](https://pip.pypa.io/en/stable/installation/) and [uv](https://docs.astral.sh/uv/getting-started/installation/).
 ```bash
 pip install --upgrade pip
 pip install uv
 uv pip install biomarkit
 ```
+
+### Storing publisher API keys.
+This file is required for a biomarkit run. The software will pull environment variables from your defined secrets.env 
+file once set up to do so. For new users we recommend storing `secrets.env` in the current working directory. 
+Alternatively, you can specify the path of your secrets.env file using the `dotenv_path` parameter and the
+following code:
+```python
+from dotenv import load_dotenv
+load_dotenv(dotenv_path="path/to/secrets.env")
+```
+We provide a template [secrets.env](/secrets.env.example) file that can be copied and renamed to `secrets.env`.
+This file acts as a template for you to fill in to store any API keys for downloading papers from specific publishers, as well as other sensitive 
+information including user emails.
 
 ## Generating a new corpus for download.
 Biomarkit takes a SCOPUS search export in .CSV format as an input. If you are unfamiliar with the process of generating
@@ -18,15 +31,17 @@ this file, follow the instructions below:
 3) On the results page, add any additional filters you wish to apply using the right hand column, then click this box to 
 select all results: ![]()
 4) Next to the select all button, click "Export", then select "CSV", then select tick the boxes as shown below:
-5) Wait for the export to complete, rename the downloaded CSV file to `scopus.csv`.
+5) Wait for the export to complete, rename the downloaded CSV file to `scopus.csv`
 6) Run the function below to generate a new `biomarkit` corpus:
 
 ```python
-from main import create_corpus
-create_corpus(name="my_new_corpus")
+from main import build_new_corpus
+build_new_corpus(name="my_new_corpus", scopus_file="/path/to/my/scopus.csv", set_active=True)
 ```
-7) Move your the `scopus.csv` file into the new corpus folder. The corpus folder should have
-the following structure:
+
+The function will automatically generate the following folder structure. By default new corpora will be built inside the
+`corpora/` folder at the current working directory. A copy of `scopus.csv` will be created inside of the new corpus 
+folder. 
 ```
 ./corpora/
 └── <my_new_corpus>/
@@ -39,6 +54,10 @@ the following structure:
     └── sqlite.db        # SQLite cache for this corpus
 ```
 
+### Switching between corpora.
+You may want to switch between different corpora when running the software. You can switch the "active" corpus by
+updating the CORPUS_NAME variable in `secrets.env` to the name of the corpus you wish to set inside `./corpora`.
+
 ## Attempt download of all full-texts for a corpus.
 Once your corpus is set up, download is handled automatically, and once a manuscript is downloaded successfully, it is 
 saved in the corpus cache file (sqlite.db) to ensure that download is not repeated if the pipeline is restarted.
@@ -48,7 +67,7 @@ To start the download of a corpus run the following command:
 from main import download_corpus
 publications = download_corpus(check_opensource=True, generate_report=True)
 ```
-Setting `check_opensource=False` will skip checking open-source download availablity for each publication using websites 
+Setting `check_opensource=False` will skip checking open-source download availability for each publication using websites 
 such as BioRxiv and Unpaywall and attempt to download the full-text directly from publisher-specific routes.
 
 Setting `generate_report=True` will generate a HTML report that records various metrics associated with the success/failure 
@@ -85,7 +104,7 @@ Caching via the `sqlite.db` file is also enabled for this function, meaning that
 repeated if the pipeline is restarted and manuscripts have already been processed.
 
 The `generate_report=True` parameter will generate a HTML report that records various metrics associated with the success/failure 
-rates of function.
+rates of the function.
 
 ## Generate the final Markdown files for a corpus.
 Once you have generated JSON document structure files for all manuscripts in your corpus, you can generate the final
@@ -119,9 +138,9 @@ within that section. Content in any subsequent peer-level sections (e.g. an Appe
 ### Removing paper boilerplate with `force_imrad_structure` flag.
 `force_imrad_structure` - If set to True, the software will attempt to classify paper headings as "core" to the 
 manuscript or "boilerplate" text that will be cut from the final version. This is done by passing manuscript text block 
-headers to a classifer model hosted locally by [Ollama](). Setting this flag attempts to remove all paper boilerplate,
+headers to a classifier model hosted locally by [Ollama](). Setting this flag attempts to remove all paper boilerplate,
 whilst retaining all core scientific text. It will also force all output markdown files to contain the following 
-headers: `# Introduction`, `# Methods`, `# Results` and `# Discussion` (can be absent if no synonomous discussion block 
+headers: `# Introduction`, `# Methods`, `# Results` and `# Discussion` (can be absent if no synonymous discussion block 
 is found).
 
 If [Ollama](https://ollama.com/) is not installed locally, but this parameter is set to True,
@@ -147,21 +166,19 @@ if available:
     print(f"GPU recognised: {torch.cuda.get_device_name(0)} ({torch.cuda.device_count()} device(s))")
 ```
 
-To run the `biomarkit.text_transformation()` using the GPU set the parameter `mineru_backend="local-gpu"` Optionally,
+To run `transform_text()` using the GPU set the parameter `mineru_backend="local-gpu"`. Optionally,
 you can also set MINERU_VIRTUAL_VRAM_SIZE in `secrets.env` to optimise performance. To run the function in CPU-only mode,
 set the parameter `mineru_backend="local-cpu"`.
 
 ## Instructions for Ollama integration.
 We recommend running biomarkit on a computer with access to a GPU. This enables the use of a local classifier LLM that 
-will increase the accuracy of text-conversion and decrease the time taken to batch process PDF's.
+will increase the accuracy of text-conversion and decrease the time taken to batch process PDFs.
 
 Note: The biomarkit package installation uses [Ollama](https://ollama.com/) for interacting with a local classifier LLM.
 For installation instructions for Ollama please follow the documentation available [here](https://docs.ollama.com/quickstart). 
 
-We recommend pre-downloading the gemma3:12b model using the command: ` ollama pull gemma3:12b`. This will pre-download 
+We recommend pre-downloading the gemma3:12b model using the command: `ollama pull gemma3:12b`. This will pre-download 
 the model weights (~8GB). Alternatively, Biomarkit will attempt to download these automatically the first time the
-`biomarkit.standardise_text()` function is called.
+`standardise_text()` function is called.
 
-**Note**:`biomarkit.download_text()` and `biomarkit.transform_text()` functions do not require gemma3:12b for full
-functionality.
-
+**Note**: `download_corpus()` and `transform_text()` do not require gemma3:12b for full functionality.

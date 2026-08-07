@@ -1,8 +1,7 @@
 import pytest
 from unittest.mock import patch
 
-from main import create_corpus
-from text_download.utils.generics import build_new_corpus
+from text_download.utils.generics import create_corpus, build_new_corpus
 
 
 def test_create_corpus_builds_folder_structure(tmp_path):

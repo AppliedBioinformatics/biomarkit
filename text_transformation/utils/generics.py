@@ -167,7 +167,7 @@ def finalise_transformation(publications: list) -> list:
         content_json_filepath) gives the standardiser visibility over failures too.
     """
     ready = [pub for pub in publications if pub.content_json_filepath is not None]
-    logging.info(
+    logging.debug(
         f"transform_text complete — {len(ready)}/{len(publications)} "
         "publication(s) have content_json_filepath set."
     )

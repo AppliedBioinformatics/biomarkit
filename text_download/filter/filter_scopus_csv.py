@@ -19,7 +19,7 @@ def load_scopus_csv(scopus_filepath: Path) -> pd.DataFrame:
     """
     columns_to_keep = ["Title", "Year", "DOI", "Publisher"]
 
-    logging.info("Attempting to load scopus CSV file.")
+    logging.debug("Attempting to load scopus CSV file.")
     df = pd.read_csv(scopus_filepath, header=0, sep=",")
 
     if "Abstract" in df.columns:
@@ -28,7 +28,7 @@ def load_scopus_csv(scopus_filepath: Path) -> pd.DataFrame:
         logging.warning("'Abstract' column not found in Scopus CSV. Publication.abstract will be None.")
 
     df = df[columns_to_keep]
-    logging.info("Scopus CSV file loaded.")
+    logging.debug("Scopus CSV file loaded.")
 
     return df
 
@@ -43,9 +43,9 @@ def remove_imperfect_rows(df: pd.DataFrame) -> pd.DataFrame:
     -------
     pd.DataFrame
     """
-    logging.info("Attempting to remove imperfect rows.")
+    logging.debug("Attempting to remove imperfect rows.")
     _df = df.dropna()
-    logging.info(f"{len(df) - len(_df)} Rows removed due to imperfections.")
+    logging.debug(f"{len(df) - len(_df)} Rows removed due to imperfections.")
     return _df
 
 def synchronise_publishers(df: pd.DataFrame,
@@ -67,10 +67,10 @@ def synchronise_publishers(df: pd.DataFrame,
     pd.DataFrame
     """
     df = df.copy()
-    logging.info("Attempting to synchronise publishers.")
+    logging.debug("Attempting to synchronise publishers.")
     reverse_map = {value: key for key, values in mapper.items() for value in values}
     df["PublisherGroup"] = df[column].map(reverse_map).fillna(df[column])
-    logging.info("Synchronised publishers.")
+    logging.debug("Synchronised publishers.")
 
     return df
 
@@ -90,7 +90,7 @@ def build_publication_objects(df: pd.DataFrame) -> List[Publication]:
 
     has_abstract = "Abstract" in df.columns
 
-    logging.info("Attempting to build a list of publication objects.")
+    logging.debug("Attempting to build a list of publication objects.")
     return [
         Publication(
             doi=row.DOI,

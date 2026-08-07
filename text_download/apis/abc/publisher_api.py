@@ -4,11 +4,13 @@ from typing import List
 from text_download.basemodels.publication import Publication
 from text_download.database.database import insert_row
 from text_download.apis.strings import default_headers
+from text_download.utils.generics import progress_split_bar
 from config import USER_EMAIL, API_KEY_TO_NAME, API_URL_TO_NAME, DOWNLOAD_DIR, DB_CACHE_FILE_NAME, LOG_DIR
 from pathlib import Path
 import random
 import logging
 import requests
+from tqdm import tqdm
 
 class PublisherApi(ABC):
     """
@@ -64,8 +66,8 @@ class PublisherApi(ABC):
             handler.setFormatter(formatter)
             logger.addHandler(handler)
 
-        # Prevent log messages leaking up the instance to the main level.
-        logger.propagate = True
+        # Prevent log messages leaking up to the root logger (console).
+        logger.propagate = False
         return logger
 
     def _test_url(self) -> bool:
@@ -243,26 +245,27 @@ class PublisherApi(ABC):
         -------
         None
         """
-        self.logger.info(f"Attempting to download {len(self.publication_list)} papers from {self.name}.")
+        total = len(self.publication_list)
+        self.logger.info(f"Attempting to download {total} papers from {self.name}.")
 
-        # Iterate across all input publications.
-        total_attempts = len(self.publication_list)
+        success, failed = 0, 0
+        with tqdm(self.publication_list, desc=self.name, unit="paper", leave=True, dynamic_ncols=True) as bar:
+            for p in bar:
+                time.sleep(self.timeout)
+                self.logger.debug(f"Attempting to download: {p.doi}.")
+                filepath = self.download_paper(doi=p.doi)
 
-        attempt = 1
-        for p in self.publication_list:
-            time.sleep(self.timeout)
-            self.logger.info(f"Attempting to download paper {attempt}/{total_attempts}: {p.doi}.")
-            doi = p.doi
-            filepath = self.download_paper(doi=doi)
+                if filepath:
+                    p.publication_filepath = filepath
+                    self.logger.debug(f"Updated related Publication object 'publication_filepath' attribute.")
+                    self._cache_successful_download(pub=p)
+                    success += 1
+                else:
+                    failed += 1
 
-            if filepath:
-                p.publication_filepath = filepath
-                self.logger.info(f"Updated related Publication object 'publication_filepath' attribute.")
-                self._cache_successful_download(pub=p)
+                bar.set_postfix_str(progress_split_bar(success, failed, total))
 
-            attempt += 1
-
-        self.logger.debug(f"{self.name}.download_all_papers() completed.")
+        self.logger.debug(f"{self.name}.download_all_papers() completed — {success}/{total} downloaded.")
 
 
 

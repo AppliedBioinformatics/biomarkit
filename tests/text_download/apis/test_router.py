@@ -134,7 +134,6 @@ def test_run_publisher_success(mock_publisher_working, caplog):
         assert len(result) == 9
 
         assert "Starting client for TestSuccessClient: Will attempt download for 9" in caplog.text
-        assert "Finished attempting downloads for TestSuccessClient." in caplog.text
 
 def test_run_publisher_failure(mock_publisher_failure, caplog):
     with caplog.at_level("INFO"):

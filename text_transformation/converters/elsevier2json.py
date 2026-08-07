@@ -1083,7 +1083,7 @@ class ElsevierXmlTransformer(Transformer):
         blocks = parse_elsevier_xml_to_blocks(str(pub.publication_filepath))
         output_path.write_text(json.dumps(blocks, ensure_ascii=False), encoding="utf-8")
 
-        logging.info(f"Elsevier XML converted for {pub.doi} → {output_path}")
+        logging.debug(f"Elsevier XML converted for {pub.doi} → {output_path}")
         return output_path
 
 

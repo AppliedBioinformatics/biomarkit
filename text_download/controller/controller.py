@@ -29,7 +29,7 @@ class Controller:
 
     def __init__(self, publication_list: List[Publication]):
 
-        logging.info("Attempting to instantiate Controller.")
+        logging.debug("Attempting to instantiate Controller.")
 
         self.publications = publication_list
         self.cache = config.DB_CACHE_FILE_NAME
@@ -38,13 +38,13 @@ class Controller:
 
         # Check cache exists, if not, create it.
         self._check_cache()
-        logging.info("Successfully instantiated Controller.")
+        logging.debug("Successfully instantiated Controller.")
 
     # Funcs for 1.
     def _check_cache(self):
         """Create or load the database cache file."""
         if self.cache.exists():
-            logging.info(f"Loading existing cache from {self.cache}")
+            logging.debug(f"Loading existing cache from {self.cache}")
 
         else:
             logging.info(f"Cache not found at {self.cache}, creating a new one...")
@@ -60,13 +60,13 @@ class Controller:
         bool: True if all publications are valid, False otherwise.
         """
 
-        logging.info("Controller is validating all publications.")
+        logging.debug("Controller is validating all publications.")
 
         assert len(self.publications) > 0, "Controller.publications is empty!"
         for pub in self.publications:
             assert type(pub) is Publication
 
-        logging.info("All publications are valid.")
+        logging.debug("All publications are valid.")
 
 
     def _update_publications_cache_state(self) -> None:
@@ -85,7 +85,7 @@ class Controller:
 
         """
 
-        logging.info("Controller is cross-referencing publication objects with Cache.")
+        logging.debug("Controller is cross-referencing publication objects with Cache.")
 
         for pub in self.publications:
 
@@ -94,7 +94,7 @@ class Controller:
             if cached_row:
                 pub.publication_filepath = cached_row["publication_filepath"]
 
-        logging.info("Controller finished checking cache for existing publication filepaths.")
+        logging.debug("Controller finished checking cache for existing publication filepaths.")
 
     def prepare_publications_for_router(self) -> dict:
         """
@@ -110,13 +110,13 @@ class Controller:
         self._update_publications_cache_state()
 
         # Sort results.
-        logging.info("Sorting publications based on cached status.")
+        logging.debug("Sorting publications based on cached status.")
         self.cached_publications = [pub for pub in self.publications if pub.is_cached]
         self.uncached_publications = [pub for pub in self.publications if not pub.is_cached]
 
         logging.info(f"Identified {len(self.uncached_publications)} uncached publications.")
         logging.info(f"Identified {len(self.cached_publications)} cached publications.")
-        logging.info("Publications are now checked and filepaths are validated.")
+        logging.debug("Publications are now checked and filepaths are validated.")
 
         return self.uncached_publications, self.cached_publications
 
