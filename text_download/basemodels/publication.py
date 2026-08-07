@@ -1,5 +1,5 @@
 from pydantic import BaseModel, FilePath, field_validator, ConfigDict
-from typing import Optional, List, Any
+from typing import Optional
 from enum import Enum
 from datetime import datetime
 import re
@@ -37,12 +37,6 @@ class Publication(BaseModel):
     publication_filepath: Optional[FilePath] = None
     content_json_filepath: Optional[FilePath] = None
     final_md_filepath: Optional[FilePath] = None
-    chunks: Optional[List[Any]] = None  # List[Chunk] — typed as Any to avoid circular import
-
-    @property
-    def is_chunked(self) -> bool:
-        return self.chunks is not None and len(self.chunks) > 0
-
     @property
     def is_cached(self) -> bool:
         return self.publication_filepath is not None
