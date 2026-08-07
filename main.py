@@ -178,7 +178,7 @@ t    mineru_batch_size : int | None, default None (inherits MinerUPdfTransformer
 
     from text_transformation.utils.generics import prepare_bulk_transformation, finalise_transformation
     from text_transformation.controller.controller import Controller
-    from text_transformation.converters.elsevier_xml_to_md import ElsevierXmlTransformer
+    from text_transformation.converters.elsevier2json import ElsevierXmlTransformer
     from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
     from text_transformation.visualisation.conversion_report import build_conversion_report
 

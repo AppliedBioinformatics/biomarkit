@@ -384,3 +384,67 @@ def test_clean_all_calls_clean_from_json_for_each_pub(tmp_path):
     with patch.object(cleaner, "clean_from_json", return_value="md") as mock_clean:
         cleaner.clean_all()
     assert mock_clean.call_count == 2
+
+
+def test_clean_from_json_updates_cache(tmp_path):
+    import sqlite3
+    from text_download.database.database import create_database
+    db = tmp_path / "cache.db"
+    create_database(db)
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "INSERT INTO cache (doi, downloaded_from, publication_filepath) VALUES (?,?,?)",
+        ("10.1016/j.test.2020.01.001", "elsevier", str(tmp_path / "paper_abc123.pdf")),
+    )
+    conn.commit()
+    conn.close()
+
+    pub = _write_pub(tmp_path)
+    cleaner = make_cleaner(force_imrad_structure=False)
+    cleaner.cache = db
+    with patch("standardisation.text_cleaning.cleaner.FINAL_MARKDOWN_DIR", tmp_path):
+        cleaner.clean_from_json(pub)
+
+    conn = sqlite3.connect(db)
+    row = conn.execute("SELECT final_md_filepath FROM cache WHERE doi=?",
+                       ("10.1016/j.test.2020.01.001",)).fetchone()
+    conn.close()
+    assert row[0] is not None
+    assert row[0].endswith(".md")
+
+
+# ---------------------------------------------------------------------------
+# _find_core_text_end
+# ---------------------------------------------------------------------------
+
+def test_find_core_text_end_inserts_end_marker_via_llm():
+    cleaner = make_cleaner()
+    blocks = [make_title("Introduction"), make_paragraph("body"), make_title("References")]
+    mock_instance = MagicMock()
+    mock_instance.classify_end.return_value = 2
+    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
+        result = cleaner._find_core_text_end(blocks)
+    titles = [b.content.title_content[0].content for b in result if b.type == "title"]
+    assert "end" in titles
+
+
+def test_find_core_text_end_llm_returns_none_logs_warning(caplog):
+    cleaner = make_cleaner()
+    blocks = [make_title("Introduction"), make_paragraph("body")]
+    mock_instance = MagicMock()
+    mock_instance.classify_end.return_value = None
+    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
+        with caplog.at_level("WARNING"):
+            result = cleaner._find_core_text_end(blocks)
+    assert result == blocks
+    assert "LLM could not identify end" in caplog.text
+
+
+def test_find_core_text_end_no_headings_logs_warning(caplog):
+    cleaner = make_cleaner()
+    blocks = [make_paragraph("no headings here")]
+    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier") as mock_llm:
+        with caplog.at_level("WARNING"):
+            result = cleaner._find_core_text_end(blocks)
+    mock_llm.assert_not_called()
+    assert "no headings found" in caplog.text

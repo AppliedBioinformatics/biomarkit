@@ -1,6 +1,8 @@
 import pytest
+from pathlib import Path
 from standardisation.content_list.schema import (
-    ImageSource,
+    ChartBlock, ChartContent,
+    ImageBlock, ImageContent, ImageSource,
     InlineEquation,
     ListBlock, ListContent, ListItem,
     MiscBlock,
@@ -173,3 +175,68 @@ def test_misc_block_silently_skipped():
     misc = MiscBlock(type="unknown_type", content={}, bbox=_BBOX)
     result = render([misc, make_paragraph("kept")])
     assert result == "kept"
+
+
+# ---------------------------------------------------------------------------
+# Image rendering
+# ---------------------------------------------------------------------------
+
+def make_image(caption: str = "", path: str = "fig1.png") -> ImageBlock:
+    return ImageBlock(
+        type="image",
+        content=ImageContent(
+            image_source=ImageSource(path=path),
+            image_caption=[TextSpan(type="text", content=caption)] if caption else [],
+        ),
+        bbox=_BBOX,
+    )
+
+
+def test_image_renders_markdown_link():
+    result = render([make_image(caption="A figure", path="fig1.png")])
+    assert "![A figure](fig1.png)" in result
+
+
+def test_image_with_caption_renders_italic_caption():
+    result = render([make_image(caption="My caption", path="fig.png")])
+    assert "*My caption*" in result
+
+
+def test_image_no_caption_no_italic():
+    result = render([make_image(caption="", path="fig.png")])
+    assert "*" not in result
+
+
+def test_image_path_resolved_with_images_dir():
+    result = render([make_image(path="fig1.png")], images_dir=Path("auto"))
+    assert "auto/fig1.png" in result
+
+
+# ---------------------------------------------------------------------------
+# Chart rendering
+# ---------------------------------------------------------------------------
+
+def make_chart(caption: str = "", path: str = "chart1.png") -> ChartBlock:
+    return ChartBlock(
+        type="chart",
+        content=ChartContent(
+            image_source=ImageSource(path=path),
+            chart_caption=[TextSpan(type="text", content=caption)] if caption else [],
+        ),
+        bbox=_BBOX,
+    )
+
+
+def test_chart_renders_markdown_link():
+    result = render([make_chart(caption="A chart", path="chart1.png")])
+    assert "![A chart](chart1.png)" in result
+
+
+def test_chart_with_caption_renders_italic():
+    result = render([make_chart(caption="Chart caption", path="chart.png")])
+    assert "*Chart caption*" in result
+
+
+def test_chart_path_resolved_with_images_dir():
+    result = render([make_chart(path="chart1.png")], images_dir=Path("auto"))
+    assert "auto/chart1.png" in result
