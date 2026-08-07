@@ -164,7 +164,7 @@ def transform_text(
         "vllm" delegates PDF inference to the remote vLLM server configured via
         MINERU_VLLM_ENDPOINT and MINERU_API_KEY in secrets.env (both are validated
         before the run starts).
-t    mineru_batch_size : int | None, default None (inherits MinerUPdfTransformer default of 25)
+    mineru_batch_size : int | None, default None (inherits MinerUPdfTransformer default of 25)
         Number of PDFs to send to MinerU per invocation. None sends all pending
         PDFs in a single call. Set a positive integer to process in sequential
         chunks — each completed chunk is cached before the next begins.

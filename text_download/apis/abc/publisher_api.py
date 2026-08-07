@@ -145,8 +145,6 @@ class PublisherApi(ABC):
                              f"probably due to too many redirects.")
             return False
 
-        # TODO - can add more logic here.
-
     def _download_paper_from_url(self, url: str, filepath: Path) -> None:
         """
         Attempts to download a paper from a URL link and save to a file at the filepath parameter.

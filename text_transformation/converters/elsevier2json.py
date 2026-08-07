@@ -1,15 +1,7 @@
 """
-Parse Elsevier full-text XML articles into standardised markdown format.
-Provides both standalone parsing functions and the ElsevierXmlConverter class
-for use within the text-transformation pipeline.
-
-Features:
-- Extracts title, authors, abstract, keywords, body text, and references
-- Converts LaTeX/MathML formulas to markdown format
-- Parses CALS tables into markdown table format
-- Organizes orphaned figures and tables under explicit "# Figures" and "# Tables" headers
-- Handles inline markup (bold, italic, superscript, subscript)
-- Preserves document structure with proper heading levels
+Parse Elsevier full-text XML articles into content_list_v2.json block format.
+Provides standalone parsing helpers and ElsevierXmlTransformer for use within
+the text-transformation pipeline.
 """
 
 import json
@@ -908,95 +900,6 @@ def _format_structured_reference(sb_ref: ET.Element) -> str:
     return ". ".join(parts) if parts else ""
 
 
-def parse_elsevier_xml(xml_path: str, organize_floats: bool = True) -> str:
-    """
-    Parse an Elsevier full-text XML file and return standardised markdown.
-
-    Parameters
-    ----------
-    xml_path : str - Path to the Elsevier XML file.
-    organize_floats : bool - If True, add explicit #Tables and #Figures headers for orphaned floats.
-
-    Returns
-    -------
-    str - Markdown formatted string of the article.
-    """
-    tree = ET.parse(xml_path)
-    root = tree.getroot()
-
-    md_parts: List[str] = []
-
-    # Title
-    title = extract_title(root)
-    if title:
-        md_parts.append(f"# {title}")
-
-    # Authors
-    authors = extract_authors(root)
-    if authors:
-        md_parts.append(", ".join(authors))
-
-    # Abstract
-    abstract = extract_abstract(root)
-    if abstract:
-        md_parts.append(f"## Abstract\n\n{abstract}")
-
-    # Keywords
-    keywords = extract_keywords(root)
-    if keywords:
-        md_parts.append(f"**Keywords:** {', '.join(keywords)}")
-
-    # Collect floats (figures/tables defined in ce:floats)
-    floats = extract_floats(root)
-
-    # Collect all figures and tables during body parsing
-    inline_floats: List[tuple[str, str]] = []
-
-    # Body sections
-    body = parse_body_sections(root, collect_floats=inline_floats)
-    if body:
-        md_parts.append(body)
-
-    # Separate inline floats by type
-    all_figures = [md for md, t in inline_floats if t == "figure"]
-    all_tables = [md for md, t in inline_floats if t == "table"]
-
-    # Add any orphaned floats from ce:floats not already captured
-    for float_id, (float_md, float_type) in floats.items():
-        if float_md and float_md not in body:
-            if float_type == "figure" and float_md not in all_figures:
-                all_figures.append(float_md)
-            elif float_type == "table" and float_md not in all_tables:
-                all_tables.append(float_md)
-
-    # Write figures and tables under explicit section headers
-    if organize_floats:
-        if all_figures:
-            md_parts.append("# Figures")
-            md_parts.extend(all_figures)
-        if all_tables:
-            md_parts.append("# Tables")
-            md_parts.extend(all_tables)
-    else:
-        md_parts.extend(all_figures)
-        md_parts.extend(all_tables)
-
-    # Acknowledgments
-    ack = extract_acknowledgments(root)
-    if ack:
-        md_parts.append(f"## Acknowledgments\n\n{ack}")
-
-    # References
-    refs = extract_references(root)
-    if refs:
-        ref_lines = ["## References", ""]
-        for ref in refs:
-            ref_lines.append(f"* {ref}")
-        md_parts.append("\n".join(ref_lines))
-
-    return "\n\n".join(md_parts) + "\n"
-
-
 # ---------------------------------------------------------------------------
 # Block-format helpers (content_list_v2.json output)
 # ---------------------------------------------------------------------------
@@ -1184,25 +1087,3 @@ class ElsevierXmlTransformer(Transformer):
         return output_path
 
 
-if __name__ == "__main__":
-    # Testing block - convert XML files to markdown and save to TMP
-    # Note: This will only work if run from the project directory due to imports
-    import sys
-    sys.path.append(str(Path(__file__).parent.parent.parent))
-    from config import TMP_DIR, DOWNLOAD_DIR
-
-    TMP_DIR.mkdir(exist_ok=True)
-
-    # Find and process XML files
-    xml_files = []
-    for xml_dir in [DOWNLOAD_DIR]:
-        if xml_dir.exists():
-            xml_files.extend(xml_dir.glob("elsevier_*.xml"))
-
-    for xml_file in xml_files[:5]:
-        try:
-            markdown_content = parse_elsevier_xml(str(xml_file))
-            output_file = TMP_DIR / f"{xml_file.stem}.md"
-            output_file.write_text(markdown_content, encoding="utf-8")
-        except (ET.ParseError, FileNotFoundError, UnicodeError):
-            continue

@@ -26,10 +26,8 @@ def create_database(db_path: Path, del_existing: bool = False) -> None:
     None
     """
 
-    # Delete if required. #
     if del_existing and db_path.exists():
-        # TODO - See issue # 1.
-        pass
+        db_path.unlink()
 
     # Build.
     db_path.parent.mkdir(parents=True, exist_ok=True)

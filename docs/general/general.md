@@ -112,8 +112,9 @@ be removed and replaced with a <figure_removed> tag.
 removed and replaced with a <table_removed> tag.
 * `keep_latex` - If True, LaTeX equations will be rendered within the final markdown file. If false, LaTeX equations
 will be removed and replaced with a <latex_removed> tag.
-* `keep_references` - If True, references will be rendered within the final markdown file. If false, The software will 
-attempt to locate the references block in the manuscript and remove it, along with any text below the references block.
+* `keep_references` - If True, references will be rendered within the final markdown file. If False, the software will
+attempt to locate the references section heading (e.g. "References", "Bibliography") and remove it along with all content
+within that section. Content in any subsequent peer-level sections (e.g. an Appendix at the same heading level) will be retained.
 
 ### Removing paper boilerplate with `force_imrad_structure` flag.
 `force_imrad_structure` - If set to True, the software will attempt to classify paper headings as "core" to the 
