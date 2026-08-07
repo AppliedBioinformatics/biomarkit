@@ -91,6 +91,9 @@ class Transformer(ABC):
 
         passed, failed = 0, 0
         for i, pub in enumerate(self.publication_list, start=1):
+            if pub.content_json_filepath is not None:
+                passed += 1
+                continue
             logging.info(f"Transforming publication {i}/{total}: {pub.doi}.")
             try:
                 result = self.transform2json(pub)
