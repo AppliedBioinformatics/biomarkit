@@ -1,8 +1,8 @@
-﻿import json
+import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from text_download.basemodels.publication import Publication
-from text_transformation.converters.elsevier_xml_to_md import (
+from text_transformation.converters.elsevier2json import (
     ElsevierXmlTransformer,
     clean_text,
     get_element_text,
@@ -15,6 +15,11 @@ from text_transformation.converters.elsevier_xml_to_md import (
     parse_body_sections,
     extract_references,
     _parse_mathml,
+    _spans,
+    _para_block,
+    _title_block,
+    _table_block,
+    parse_elsevier_xml_to_blocks,
 )
 
 CE = "http://www.elsevier.com/xml/common/dtd"
@@ -416,3 +421,144 @@ def test_transform2json_title_block_present(tmp_path):
     blocks = json.loads(result_path.read_text(encoding="utf-8"))[0]
 
     assert any("Title Check" in str(b) for b in blocks if b.get("type") == "title")
+
+
+# ---------------------------------------------------------------------------
+# _spans
+# ---------------------------------------------------------------------------
+
+def test_spans_plain_text():
+    result = _spans("hello world")
+    assert result == [{"type": "text", "content": "hello world"}]
+
+
+def test_spans_inline_equation():
+    result = _spans("See $x^2$ above")
+    types = [s["type"] for s in result]
+    assert "equation_inline" in types
+    eq = next(s for s in result if s["type"] == "equation_inline")
+    assert eq["content"] == "x^2"
+
+
+def test_spans_empty_string():
+    result = _spans("")
+    assert result == [{"type": "text", "content": ""}]
+
+
+def test_spans_multiple_equations():
+    result = _spans("$a$ and $b$")
+    eq_spans = [s for s in result if s["type"] == "equation_inline"]
+    assert len(eq_spans) == 2
+
+
+# ---------------------------------------------------------------------------
+# _para_block / _title_block
+# ---------------------------------------------------------------------------
+
+def test_para_block_structure():
+    block = _para_block("Some text")
+    assert block["type"] == "paragraph"
+    assert block["content"]["paragraph_content"][0]["content"] == "Some text"
+
+
+def test_title_block_structure():
+    block = _title_block("Introduction", level=1)
+    assert block["type"] == "title"
+    assert block["content"]["level"] == 1
+    assert block["content"]["title_content"][0]["content"] == "Introduction"
+
+
+# ---------------------------------------------------------------------------
+# _table_block
+# ---------------------------------------------------------------------------
+
+def test_table_block_returns_none_when_empty():
+    xml = f'<ce:table xmlns:ce="{CE}"/>'
+    assert _table_block(ET.fromstring(xml)) is None
+
+
+def test_table_block_with_caption():
+    xml = (
+        f'<ce:table xmlns:ce="{CE}">'
+        f'<ce:label xmlns:ce="{CE}">Table 1</ce:label>'
+        f'<ce:caption xmlns:ce="{CE}">'
+        f'<ce:simple-para xmlns:ce="{CE}">A caption</ce:simple-para>'
+        f'</ce:caption>'
+        f'</ce:table>'
+    )
+    block = _table_block(ET.fromstring(xml))
+    assert block is not None
+    assert block["type"] == "table"
+    assert any("A caption" in s["content"] for s in block["content"]["table_caption"])
+
+
+def test_table_block_with_rows_generates_html():
+    xml = (
+        f'<ce:table xmlns:ce="{CE}">'
+        f'<ce:label xmlns:ce="{CE}">T1</ce:label>'
+        f'<ce:caption xmlns:ce="{CE}">'
+        f'<ce:simple-para xmlns:ce="{CE}">Cap</ce:simple-para>'
+        f'</ce:caption>'
+        f'<tgroup>'
+        f'<thead><row><entry>A</entry><entry>B</entry></row></thead>'
+        f'<tbody><row><entry>1</entry><entry>2</entry></row></tbody>'
+        f'</tgroup>'
+        f'</ce:table>'
+    )
+    block = _table_block(ET.fromstring(xml))
+    assert block["content"]["html"] is not None
+    assert "<table>" in block["content"]["html"]
+    assert "<th>A</th>" in block["content"]["html"]
+
+
+# ---------------------------------------------------------------------------
+# parse_elsevier_xml_to_blocks
+# ---------------------------------------------------------------------------
+
+def test_parse_elsevier_xml_to_blocks_returns_single_page(tmp_path):
+    xml_path = tmp_path / "article.xml"
+    xml_path.write_text(_article_xml(title="Block Test"), encoding="utf-8")
+    result = parse_elsevier_xml_to_blocks(str(xml_path))
+    assert isinstance(result, list)
+    assert len(result) == 1  # single page
+    assert isinstance(result[0], list)
+
+
+def test_parse_elsevier_xml_to_blocks_contains_title(tmp_path):
+    xml_path = tmp_path / "article.xml"
+    xml_path.write_text(_article_xml(title="My Title"), encoding="utf-8")
+    blocks = parse_elsevier_xml_to_blocks(str(xml_path))[0]
+    title_blocks = [b for b in blocks if b.get("type") == "title"]
+    assert any("My Title" in str(b) for b in title_blocks)
+
+
+def test_parse_elsevier_xml_to_blocks_contains_abstract(tmp_path):
+    xml_path = tmp_path / "article.xml"
+    xml_path.write_text(_article_xml(abstract_text="The abstract text."), encoding="utf-8")
+    blocks = parse_elsevier_xml_to_blocks(str(xml_path))[0]
+    para_blocks = [b for b in blocks if b.get("type") == "paragraph"]
+    assert any("The abstract text." in str(b) for b in para_blocks)
+
+
+def test_parse_elsevier_xml_to_blocks_body_sections(tmp_path):
+    xml = (
+        f'<?xml version="1.0"?>'
+        f'<full-text-retrieval-response xmlns="{DEFAULT_NS}">'
+        f'<ja:article xmlns:ja="{JA}">'
+        f'<ja:head xmlns:ja="{JA}"><ce:title xmlns:ce="{CE}">T</ce:title></ja:head>'
+        f'<ja:body xmlns:ja="{JA}">'
+        f'<ce:sections xmlns:ce="{CE}">'
+        f'<ce:section xmlns:ce="{CE}">'
+        f'<ce:section-title xmlns:ce="{CE}">Methods</ce:section-title>'
+        f'<ce:para xmlns:ce="{CE}">We did things.</ce:para>'
+        f'</ce:section>'
+        f'</ce:sections>'
+        f'</ja:body>'
+        f'</ja:article>'
+        f'</full-text-retrieval-response>'
+    )
+    xml_path = tmp_path / "body.xml"
+    xml_path.write_text(xml, encoding="utf-8")
+    blocks = parse_elsevier_xml_to_blocks(str(xml_path))[0]
+    assert any("Methods" in str(b) for b in blocks)
+    assert any("We did things." in str(b) for b in blocks)
