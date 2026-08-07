@@ -83,6 +83,7 @@ class MinerUPdfTransformer(Transformer):
                 if chunk:
                     logging.info(f"MinerU batch chunk {idx}/{total_chunks} ({len(chunk)} PDF(s)).")
                     self._run_mineru_batch(chunk)
+                    self._cache_chunk(chunk)
         super().transform_all()
 
     def _build_batch_command(self, staging_dir: Path) -> list[str]:
@@ -134,6 +135,17 @@ class MinerUPdfTransformer(Transformer):
         elif self.mineru_backend == "local-cpu":
             env["CUDA_VISIBLE_DEVICES"] = ""
         return env
+
+    def _cache_chunk(self, publications: List[Publication]) -> None:
+        """
+        Writes content_json_filepath to the cache for each publication in a
+        completed chunk, so progress survives if a later chunk fails or hangs.
+        """
+        for pub in publications:
+            json_path = self._build_output_path(pub)
+            if json_path.exists():
+                pub.content_json_filepath = json_path
+                self._cache_result(pub)
 
     def _run_mineru_batch(self, publications: List[Publication]) -> None:
         """
