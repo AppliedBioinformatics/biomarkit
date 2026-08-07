@@ -14,3 +14,5 @@ tmp/
 .claude/
 .worktrees/
 llm_response.txt
+text_download/apis/clients/am_phyto_soc.py
+text_download/apis/clients/copernicus.py
