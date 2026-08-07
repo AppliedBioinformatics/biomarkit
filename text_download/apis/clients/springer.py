@@ -18,8 +18,6 @@ class SpringerClient(PublisherApi):
         super().__init__(name="springer", publication_list=publication_list)
         self.timeout = 10
 
-    # ===Client specific methods - not overwritten from PublisherApi. ===
-
     # === These methods are inherited from PublicationApi and should be overwritten. ===
     def download_paper(self, doi: str) -> Path or None:
 
@@ -29,11 +27,10 @@ class SpringerClient(PublisherApi):
         status_code = self._attempt_download(doi=doi, url=url, filepath=filepath)
 
         if not status_code:
-            self.logger.info(f"Download attempt failed for {doi} from client: {self.name}")
+            self.logger.debug(f"Download attempt failed for {doi} from client: {self.name}")
             return None
 
-        self.logger.info(f"Paper downloaded for DOI: {doi} at filepath: {filepath}.")
-        self.logger.debug("SpringerAPI.download_paper() completed.")
+        self.logger.debug(f"Paper downloaded for DOI: {doi} at filepath: {filepath}.")
         return filepath
 
 
