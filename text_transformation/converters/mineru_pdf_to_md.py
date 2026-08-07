@@ -105,7 +105,7 @@ class MinerUPdfTransformer(Transformer):
         if self.mineru_backend == "vllm":
             cmd += ["-b", "vlm-http-client", "-u", MINERU_VLLM_ENDPOINT]
         elif self.mineru_backend == "local-cpu":
-            cmd += ["-b", "pipeline", "-l", MINERU_OCR_LANG, "--device", "cpu"]
+            cmd += ["-b", "pipeline", "-l", MINERU_OCR_LANG]
         else:
             cmd += ["-b", "pipeline", "-l", MINERU_OCR_LANG]
         return cmd
@@ -131,6 +131,8 @@ class MinerUPdfTransformer(Transformer):
 
         if self.mineru_backend == "vllm":
             env["MINERU_VL_API_KEY"] = MINERU_API_KEY
+        elif self.mineru_backend == "local-cpu":
+            env["CUDA_VISIBLE_DEVICES"] = ""
         return env
 
     def _run_mineru_batch(self, publications: List[Publication]) -> None:
