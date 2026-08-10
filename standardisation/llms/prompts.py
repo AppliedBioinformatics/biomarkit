@@ -20,10 +20,12 @@ top-level section heading.
 - Every paper has some form of back-matter. You must always return one index.
 - Sometimes the methods section is the last section of the paper, in these cases the non-scientific boilerplate \
 will begin after the end of this section.
+- In some papers, you may see a section called "STAR methods", this should be interpreted as core scientific text \
+NOT back matter.
 
 Return ONLY a raw JSON object — no markdown fences, no prose — with a single key "end_index" \
 whose value is the string key from the input that corresponds to the first back-matter block. It is HIGHLY likely \
-that the end of the core scientific material will be towards the bottom of the block index.
+that the end of the core scientific material will be towards the bottom of the block index. 
 
 Example: {"end_index": "100"}
 """
@@ -69,6 +71,7 @@ numbers, Roman numerals, and punctuation when evaluating the heading text.
 - The methods section always comes after the introduction but may come before or after the results and/or discussion.
 - Prefer the top-level section heading over subsection headings (e.g. prefer "2. Methods" over "2.1 Sample preparation").
 - Every scientific paper has a methods section. You must always return one index.
+- In some cases, methods section may be refered to as "STAR methods" and exist towards the bottom of a paper.
 
 Return ONLY a raw JSON object — no markdown fences, no prose — with a single key "methods_index" \
 whose value is the string key from the input that corresponds to the methods heading.
