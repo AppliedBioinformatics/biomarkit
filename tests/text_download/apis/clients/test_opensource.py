@@ -5,38 +5,40 @@ from requests.exceptions import RequestException
 from pathlib import Path
 
 # === Unpaywall fallback route ===
-def test__get_pdf_url_success(publications):
+def test__get_pdf_url_prefers_url_for_pdf(publications):
     api = OpenSourceClient(publications)
     doi = "10.1234/testdoi"
     expected_url = "http://example.com/paper.pdf"
 
-    # Mock requests.get to return a JSON containing best_oa_location.url_for_pdf
     with patch("text_download.apis.clients.opensource.requests.get") as mock_get:
-
-        # Test finding a url.
-        mock_response=MagicMock()
+        mock_response = MagicMock()
         mock_response.raise_for_status.return_value = None
-        mock_response.json.return_value = {"best_oa_location": {"url_for_pdf": expected_url}}
+        mock_response.json.return_value = {"best_oa_location": {"url_for_pdf": expected_url, "url": "http://example.com/landing"}}
         mock_get.return_value = mock_response
-        result = api._get_pdf_url(doi)
-        assert result == expected_url
+        assert api._get_pdf_url(doi) == expected_url
 
-def test__get_pdf_url_attribute_error(publications, caplog):
+def test__get_pdf_url_falls_back_to_url(publications):
+    api = OpenSourceClient(publications)
+    doi = "10.1234/testdoi"
+    landing_url = "http://example.com/landing"
+
+    with patch("text_download.apis.clients.opensource.requests.get") as mock_get:
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {"best_oa_location": {"url_for_pdf": None, "url": landing_url}}
+        mock_get.return_value = mock_response
+        assert api._get_pdf_url(doi) == landing_url
+
+def test__get_pdf_url_no_oa_location(publications):
     api = OpenSourceClient(publications)
     doi = "10.1234/testdoi"
 
     with patch("text_download.apis.clients.opensource.requests.get") as mock_get:
         mock_response = MagicMock()
         mock_response.raise_for_status.return_value = None
-
-        # Missing "best_oa_location".
         mock_response.json.return_value = {}
         mock_get.return_value = mock_response
-
-        with caplog.at_level("INFO", logger=api.logger.name):
-            result = api._get_pdf_url(doi)
-            assert result is None
-            assert "Unable to retrieve url for DOI" in caplog.text
+        assert api._get_pdf_url(doi) is None
 
 def test__get_pdf_url_request_exception(publications, caplog):
     api = OpenSourceClient(publications)
@@ -69,7 +71,7 @@ def test_download_paper_fails(publications, caplog):
 
     with patch.object(api, "_get_pdf_url", return_value=fake_url), \
             patch.object(api, "_build_download_filepath", return_value=fake_filepath), \
-            patch.object(api, "_attempt_download", return_value=False):
+            patch.object(api, "_download_pdf_if_valid", return_value=False):
 
         with caplog.at_level("INFO", logger=api.logger.name):
             result = api.download_paper(doi)
@@ -83,7 +85,7 @@ def test_download_paper_success(publications, caplog):
 
     with patch.object(api, "_get_pdf_url", return_value=fake_url), \
             patch.object(api, "_build_download_filepath", return_value=fake_filepath), \
-            patch.object(api, "_attempt_download", return_value=True):
+            patch.object(api, "_download_pdf_if_valid", return_value=True):
 
         with caplog.at_level("INFO", logger=api.logger.name):
             result = api.download_paper(doi)

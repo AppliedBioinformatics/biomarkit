@@ -295,7 +295,7 @@ if __name__ == "__main__":
     logging.debug("Conversion of first paper may take longer due to model weight download.")
     standardise_text(publications,
                      keep_latex=True,
-                     keep_tables=True,
+                     keep_tables=False,
                      keep_figures=False,
                      keep_references=False,
                      force_imrad_structure=True)

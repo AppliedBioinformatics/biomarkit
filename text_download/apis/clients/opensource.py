@@ -179,7 +179,8 @@ class OpenSourceClient(PublisherApi):
             resp = requests.get(api_url, timeout=self.timeout)
             resp.raise_for_status()
             data=resp.json()
-            return data.get("best_oa_location").get("url_for_pdf")
+            best = data.get("best_oa_location") or {}
+            return best.get("url_for_pdf") or best.get("url")
 
         except AttributeError:
             self.logger.info(f"Unable to retrieve url for DOI: {doi} via the fallback lookup.")
@@ -205,10 +206,7 @@ class OpenSourceClient(PublisherApi):
         self.logger.info(f"Open access URL found for DOI: {doi}. Attempting to download...")
         filepath = self._build_download_filepath(source="unpaywall")
 
-        # Attempt to download using requests.
-        status_code = self._attempt_download(doi=doi, url=download_url, filepath=filepath)
-
-        if not status_code:
+        if not self._download_pdf_if_valid(url=download_url, filepath=filepath):
             return None
 
         self.logger.info(f"Paper downloaded for DOI: {doi} at filepath: {filepath}.")

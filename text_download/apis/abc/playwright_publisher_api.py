@@ -139,7 +139,8 @@ class PlaywrightPublisherApi(PublisherApi):
             resp = requests.get(api_url, timeout=self.timeout)
             resp.raise_for_status()
             data = resp.json()
-            return data.get("best_oa_location", {}).get("url_for_pdf")
+            best = data.get("best_oa_location") or {}
+            return best.get("url_for_pdf") or best.get("url")
 
         except AttributeError:
             self.logger.info(f"Unable to retrieve url for DOI: {doi}.")
