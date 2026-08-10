@@ -17,6 +17,9 @@ class SpringerClient(PublisherApi):
     def __init__(self, publication_list: list):
         super().__init__(name="springer", publication_list=publication_list)
         self.timeout = 10
+        # Springer's bot detection rejects the browser-spoofing default_headers;
+        # a plain requests call (no custom headers) returns the PDF correctly.
+        self.request_headers = {}
 
     # === These methods are inherited from PublicationApi and should be overwritten. ===
     def download_paper(self, doi: str) -> Path or None:

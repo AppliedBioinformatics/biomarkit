@@ -30,6 +30,9 @@ class OpenSourceClient(PublisherApi):
     def __init__(self, publication_list: list):
         super().__init__(name="opensource", publication_list=publication_list)
         self.timeout = 1
+        # Same bot-detection issue as SpringerClient: the browser-spoofing default_headers
+        # cause publisher sites (BioMedCentral, Springer, etc.) to return HTML instead of PDFs.
+        self.request_headers = {}
 
     # ===Client specific methods - not overwritten from PublisherApi. ===
     @staticmethod
