@@ -24,7 +24,9 @@ from config import FINAL_MARKDOWN_DIR
 from text_download.database.database import update_final_md_filepath
 
 # Strips leading section numbering (e.g. "1.", "II.", "§3") before matching heading text.
-_SECTION_PREFIX_RE = re.compile(r'^[\d\s.\-–—\xa7IVXivx]+')
+# Roman numeral chars (IVXivx) are only stripped when followed by a non-alpha character so
+# that words like "Introduction" or "Results" are not accidentally truncated.
+_SECTION_PREFIX_RE = re.compile(r'^(?:[\d\s.\-–—\xa7]+|[IVXivx]+(?=[^a-zA-Z]))*')
 _INTRO_RE = re.compile(r'^(introduction|background)\b')
 _METHODS_RE = re.compile(
     r'^(methods|materials\s+(?:and|&)\s+methods|methodology'
@@ -171,11 +173,19 @@ class Cleaner:
 
     # --- IMRAD structure methods ---
     def _find_introduction_start(self, blocks) -> list:
-        for block in blocks:
-            if isinstance(block, TitleBlock) and self._is_intro_heading(block):
-                logging.debug("[Cleaner] Introduction found via regex")
-                self._rename_heading(block, "Introduction")
-                return blocks
+        matches = [
+            (i, b) for i, b in enumerate(blocks)
+            if isinstance(b, TitleBlock) and self._is_intro_heading(b)
+        ]
+        if matches:
+            # Keep the highest-level heading (lowest level number = fewest #'s).
+            best_i, best_block = min(matches, key=lambda x: x[1].content.level)
+            logging.debug("[Cleaner] Introduction found via regex")
+            self._rename_heading(best_block, "Introduction")
+            drop = {i for i, _ in matches if i != best_i}
+            if drop:
+                blocks = [b for i, b in enumerate(blocks) if i not in drop]
+            return blocks
 
         blocks_context = self._build_llm_context(blocks[:100])
         if not blocks_context:

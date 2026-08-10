@@ -238,6 +238,29 @@ def test_find_introduction_start_regex_path():
     assert intro.content.title_content[0].content == "Introduction"
 
 
+def test_find_introduction_start_picks_highest_level_heading():
+    cleaner = make_cleaner()
+    # Level 1 "Introduction" and level 2 "Introduction" both match — level 1 wins, level 2 is dropped.
+    blocks = [make_title("Introduction", level=1), make_title("Introduction", level=2)]
+    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier"):
+        result = cleaner._find_introduction_start(blocks)
+    title_blocks = [b for b in result if b.type == "title"]
+    assert len(title_blocks) == 1
+    assert title_blocks[0].content.level == 1
+
+
+def test_find_introduction_start_drops_lower_level_duplicate():
+    cleaner = make_cleaner()
+    # Simulates "# Introduction" inserted by cleaner + "## 1 Introduction" from the article.
+    para = make_paragraph("body text")
+    blocks = [make_title("Introduction", level=1), make_title("1 Introduction", level=2), para]
+    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier"):
+        result = cleaner._find_introduction_start(blocks)
+    title_blocks = [b for b in result if b.type == "title"]
+    assert len(title_blocks) == 1
+    assert title_blocks[0].content.title_content[0].content == "Introduction"
+
+
 # ---------------------------------------------------------------------------
 # _find_introduction_start — LLM fallback path
 # ---------------------------------------------------------------------------
