@@ -471,3 +471,87 @@ def test_find_core_text_end_no_headings_logs_warning(caplog):
             result = cleaner._find_core_text_end(blocks)
     mock_llm.assert_not_called()
     assert "no headings found" in caplog.text
+
+
+def test_find_core_text_end_rejects_index_before_introduction(caplog):
+    # LLM returns index 0 (a front-matter heading) which is before Introduction at index 2.
+    # The guard should reject it and return the original block list unchanged.
+    cleaner = make_cleaner()
+    blocks = [
+        make_title("Keywords"),
+        make_paragraph("abstract text"),
+        make_title("Introduction"),
+        make_paragraph("body"),
+        make_title("Methods"),
+        make_paragraph("methods text"),
+    ]
+    mock_instance = MagicMock()
+    mock_instance.classify_end.return_value = 0
+    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
+        with caplog.at_level("WARNING"):
+            result = cleaner._find_core_text_end(blocks)
+    assert result == blocks
+    assert "before or at Introduction/Methods" in caplog.text
+    titles = [b.content.title_content[0].content for b in result if b.type == "title"]
+    assert "end" not in titles
+
+
+def test_find_core_text_end_rejects_index_equal_to_introduction(caplog):
+    # LLM returns the Introduction block itself — must be rejected (end must come after it).
+    cleaner = make_cleaner()
+    blocks = [
+        make_title("Introduction"),
+        make_paragraph("body"),
+        make_title("Methods"),
+    ]
+    mock_instance = MagicMock()
+    mock_instance.classify_end.return_value = 0  # index of Introduction
+    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
+        with caplog.at_level("WARNING"):
+            result = cleaner._find_core_text_end(blocks)
+    assert result == blocks
+    assert "before or at Introduction/Methods" in caplog.text
+
+
+def test_find_core_text_end_accepts_index_after_methods_when_no_introduction(caplog):
+    # No Introduction heading present — Methods acts as the minimum anchor.
+    # An end index after Methods should be accepted normally.
+    cleaner = make_cleaner()
+    blocks = [
+        make_title("Methods"),
+        make_paragraph("methods text"),
+        make_title("Results"),
+        make_paragraph("results text"),
+        make_title("Acknowledgments"),
+    ]
+    mock_instance = MagicMock()
+    mock_instance.classify_end.return_value = 4  # Acknowledgments — after Methods
+    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
+        result = cleaner._find_core_text_end(blocks)
+    titles = [b.content.title_content[0].content for b in result if b.type == "title"]
+    assert "end" in titles
+
+
+def test_find_core_text_end_full_pipeline_empty_output_prevented():
+    # Regression: simulates the Royal Society paper pattern where front-matter headings
+    # (Keywords at index 0) appear before Introduction (index 2). If the LLM picks index 0,
+    # _trim_to_core_text would produce an empty list. The guard must prevent this.
+    cleaner = make_cleaner()
+    blocks = [
+        make_title("Keywords"),       # 0 — front-matter
+        make_paragraph("kw text"),    # 1
+        make_title("Introduction"),   # 2
+        make_paragraph("intro body"), # 3
+        make_title("Methods"),        # 4
+        make_paragraph("methods"),    # 5
+        make_title("Results"),        # 6
+        make_paragraph("results"),    # 7
+    ]
+    mock_instance = MagicMock()
+    mock_instance.classify_end.return_value = 0  # bad LLM pick — front-matter
+    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
+        result = cleaner._find_core_text_end(blocks)
+    # No "end" marker inserted — _trim_to_core_text will keep everything from Introduction onward
+    trimmed = cleaner._trim_to_core_text(result)
+    assert len(trimmed) > 0
+    assert trimmed[0].content.title_content[0].content == "Introduction"

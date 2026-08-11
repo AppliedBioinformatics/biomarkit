@@ -206,8 +206,29 @@ class Cleaner:
             logging.warning("[Cleaner] find_core_text_end: no headings found")
             return blocks
 
+        # The end must come after the Introduction (or Methods at the earliest).
+        # Find the minimum acceptable index to guard against the LLM picking front-matter.
+        intro_position = next(
+            (i for i, b in enumerate(blocks)
+             if isinstance(b, TitleBlock) and b.content.text == "Introduction"),
+            None,
+        )
+        methods_position = next(
+            (i for i, b in enumerate(blocks)
+             if isinstance(b, TitleBlock) and self._is_methods_heading(b)),
+            None,
+        )
+        min_end = max(p for p in (intro_position, methods_position) if p is not None) if (intro_position or methods_position) else 0
+
         end_index = LlamaClassifier().classify_end(blocks_context)
         if end_index is not None:
+            if end_index <= min_end:
+                logging.warning(
+                    "[Cleaner] find_core_text_end: LLM returned index %d which is before or at "
+                    "Introduction/Methods (position %d) — ignoring and keeping full block list",
+                    end_index, min_end,
+                )
+                return blocks
             logging.debug("[Cleaner] Core text end found via LLM at block index %d", end_index)
             return self._insert_end_marker(blocks, end_index)
 
