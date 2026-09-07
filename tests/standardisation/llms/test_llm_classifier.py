@@ -1,13 +1,13 @@
-import json
+﻿import json
 from unittest.mock import MagicMock, patch
-from standardisation.llms.llm_classifier import LlamaClassifier
+from biomarkit.standardisation.llms.llm_classifier import LlamaClassifier
 
 
 BLOCKS = {0: "[heading] Abstract", 1: "[paragraph] Some intro text.", 2: "[heading] Methods", 3: "[heading] Results"}
 
 
 def _make_classifier():
-    with patch("standardisation.llms.llm_classifier.OpenAI"):
+    with patch("biomarkit.standardisation.llms.llm_classifier.OpenAI"):
         clf = LlamaClassifier()
     return clf
 

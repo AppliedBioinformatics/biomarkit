@@ -1,6 +1,6 @@
-from text_download.filter.filter_scopus_csv import *
-from text_download.filter.publisher_map import publisher_map
-from config import BASE_DIR
+﻿from biomarkit.text_download.filter.filter_scopus_csv import *
+from biomarkit.text_download.filter.publisher_map import publisher_map
+from biomarkit.config import BASE_DIR
 
 def test_load_scopus_csv():
     test_data = BASE_DIR / "tests" / "test_data" / "scopus_test_query.csv"

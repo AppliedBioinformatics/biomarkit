@@ -13,7 +13,7 @@ attempted using specific publisher APIs including Elsevier, Wiley, Springer, MDP
 
 **API keys are required for publishers that do not support fully automated text-mining**
 
-### Derive JSON manuscript structures from PDF and XML files with `text_transformation()`.
+### Derive JSON manuscript structures from PDF and XML files with `transform_text()`.
 Converts downloaded PDFs and XML files into a single, structured JSON format. XMLs are parsed directly, and PDFs are
 converted locally via MinerU (GPU can be used here for performance improvements – See [MinerU](https://github.com/opendatalab/mineru)).
 Captures other outputs including raw texts and figures.
@@ -33,29 +33,29 @@ The "force_imrad_structure" parameter will force each output Markdown file to co
 ### Complete a full download and generate markdown files for each DOI in a given Scopus query:
 
 ```python
-from main import download_corpus, transform_text, standardise_text, build_new_corpus
+import biomarkit
 
 # Make a new corpus and set it as active (writes CORPUS_NAME to secrets.env)
-build_new_corpus(name="my_corpus", scopus_file="path/to/scopus.csv", set_active=True)
+biomarkit.build_new_corpus(name="my_corpus", scopus_file="path/to/scopus.csv", set_active=True)
 
 # Attempt download for all DOIs:
-publications = download_corpus(check_opensource=True, generate_report=True)
+publications = biomarkit.download_corpus(check_opensource=True, generate_report=True)
 
 # Run OCR and XML parser to generate JSON document structures:
-publications = transform_text(publications)
+publications = biomarkit.transform_text(publications)
 
 # Build final markdown files:
-standardise_text(publications, keep_figures=False, keep_tables=True, keep_latex=True, force_imrad_structure=True)
+biomarkit.standardise_text(publications, keep_figures=False, keep_tables=True, keep_latex=True, force_imrad_structure=True)
 ```
 
 ### Publications as Python objects:
 `Publication` Python objects are returned at each step and are useful for integrating the package within larger 
 Python workflows. For example, storing each publication as a Python object makes it easy to query metadata and filepaths:
 
-```Python
-from main import download_corpus
+```python
+import biomarkit
 
-publications = download_corpus(check_opensource=True)
+publications = biomarkit.download_corpus(check_opensource=True)
 
 # Query metadata for all DOIs in the active corpus: 
 for pub in publications:
@@ -72,7 +72,23 @@ for pub in publications:
 ---
 ## Configuration
 
-All user-facing settings live in `secrets.env` (copy from `secrets.env.example`):
+### Workspace directory
+
+By default, biomarkit creates a `corpora/` folder in your **current working directory**. To use a different location, set the `BIOMARKIT_DIR` environment variable before running:
+
+```bash
+# Linux/macOS
+export BIOMARKIT_DIR=/path/to/my/workspace
+
+# Windows (PowerShell)
+$env:BIOMARKIT_DIR = "C:\path\to\my\workspace"
+```
+
+Biomarkit also looks for `secrets.env` inside this directory.
+
+### API keys and settings
+
+All user-facing settings live in `secrets.env` (copy from [`secrets.env.example`](secrets.env.example) and place it in your workspace directory):
 
 | Setting | Description |
 |---|---|
@@ -86,22 +102,20 @@ All user-facing settings live in `secrets.env` (copy from `secrets.env.example`)
 
 ### The corpus folder structure
 
-All inputs and outputs for a scopus query live under `corpora/<corpus_name>/`. The active corpus is selected by setting
-`CORPUS_NAME` in `secrets.env`. Each corpus folder has the following structure:
+All inputs and outputs for a Scopus query live under `corpora/<corpus_name>/` inside your workspace directory. The active corpus is selected by setting `CORPUS_NAME` in `secrets.env`. Each corpus folder has the following structure:
 
 ```
 corpora/
 └── <corpus_name>/
-    ├── scopus.csv       # Scopus query export (input — you need to place this here)
-    ├── manuscripts/     # Downloaded full-text PDFs/XMLs  output of `extract_text()`
-    ├── intermediates/   # MinerU output files and JSON structures - output of `transform_text()`
-    ├── results/         # Final standardised Markdown files - output of `standardised_text()`
-    ├── reports/         # All HTML output reports.
+    ├── scopus.csv       # Scopus query export (input)
+    ├── manuscripts/     # Downloaded full-text PDFs/XMLs — output of `download_corpus()`
+    ├── intermediates/   # MinerU output files and JSON structures — output of `transform_text()`
+    ├── results/         # Final standardised Markdown files — output of `standardise_text()`
+    ├── reports/         # All HTML output reports
     ├── logs/            # Run logs
     └── sqlite.db        # SQLite cache for this corpus
 ```
-Everything except `scopus.csv` is created automatically on the first run when defining a new active corpus. You can 
-create a new corpus by running the function `create_corpus(name="my_corpus", scopus_file="path/to/scopus.csv")`.
+Everything except `scopus.csv` is created automatically. Create a new corpus with `build_new_corpus(name="my_corpus", scopus_file="path/to/scopus.csv")`.
 
 ---
 

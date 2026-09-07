@@ -1,9 +1,9 @@
-import pytest
+﻿import pytest
 from unittest.mock import patch, MagicMock
 from pathlib import Path
-from text_download.apis.clients.mdpi import MdpiClient
-from text_download.apis.abc.playwright_publisher_api import PlaywrightPublisherApi
-from text_download.basemodels.publication import Publication
+from biomarkit.text_download.apis.clients.mdpi import MdpiClient
+from biomarkit.text_download.apis.abc.playwright_publisher_api import PlaywrightPublisherApi
+from biomarkit.text_download.basemodels.publication import Publication
 
 
 @pytest.fixture

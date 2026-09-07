@@ -17,7 +17,7 @@ API to call when download is requested for each DOI. For example:
              "Elsevier Ireland Ltd"]}
 ```
 
-This publisher mapping dictionary is stored in [publisher_map.py](/text_download/filter/publisher_map.py). If you find 
+This publisher mapping dictionary is stored in [publisher_map.py](/biomarkit/text_download/filter/publisher_map.py). If you find 
 some variation of a 'publisher' value in your SCOPUS query export that is not covered and should be added to the
 dictionary, please raise an issue or merge request. By doing this we can improve the mapping file collectively and allow
 for more successful downloads.
@@ -25,16 +25,16 @@ for more successful downloads.
 ## Building a new API using the PublisherApi base class.
 
 All publisher-specific download clients inherit from `PublisherApi` (defined in
-`text_download/apis/abc/publisher_api.py`). The base class handles logging, URL
+`biomarkit/text_download/apis/abc/publisher_api.py`). The base class handles logging, URL
 health-checking, file path generation, download helpers, and the main iteration
 loop. You only need to wire up config entries and implement one abstract method.
 
 ### Step 1 — Add config entries
 
-Every client requires a name key in both maps inside `config.py`:
+Every client requires a name key in both maps inside `biomarkit/config.py`:
 
 ```python
-# config.py
+# biomarkit/config.py
 
 API_URL_TO_NAME = {
     ...
@@ -55,8 +55,8 @@ MY_PUBLISHER_API_KEY=your_key_here
 
 ### Step 2 — Create the client class
 
-Create a new file under `text_download/apis/clients/`, e.g.
-`text_download/apis/clients/my_publisher.py`.
+Create a new file under `biomarkit/text_download/apis/clients/`, e.g.
+`biomarkit/text_download/apis/clients/my_publisher.py`.
 
 Subclass `PublisherApi` and pass your config name to `super().__init__()`.
 The only method you **must** implement is `download_paper()` — it receives a DOI
@@ -64,10 +64,10 @@ string and must return either a `Path` to the downloaded file on success, or
 `None` on failure.
 
 ```python
-# text_download/apis/clients/my_publisher.py
+# biomarkit/text_download/apis/clients/my_publisher.py
 
 from pathlib import Path
-from text_download.apis.abc.publisher_api import PublisherApi
+from biomarkit.text_download.apis.abc.publisher_api import PublisherApi
 
 
 class MyPublisherClient(PublisherApi):
@@ -108,11 +108,11 @@ and shows a `tqdm` progress bar. You do not need to override it unless you need
 
 ### Step 3 — Register the client
 
-Add the new client to the router map in `text_download/apis/map.py`:
+Add the new client to the router map in `biomarkit/text_download/apis/map.py`:
 
 ```python
-# text_download/apis/map.py
-from text_download.apis.clients.my_publisher import MyPublisherClient
+# biomarkit/text_download/apis/map.py
+from biomarkit.text_download.apis.clients.my_publisher import MyPublisherClient
 
 api_clients = {
     ...
@@ -122,7 +122,7 @@ api_clients = {
 
 ### Step 4 — Map publisher name variants
 
-Add an entry to `publisher_map` in `text_download/filter/publisher_map.py` so
+Add an entry to `publisher_map` in `biomarkit/text_download/filter/publisher_map.py` so
 that SCOPUS publisher strings route to your new key:
 
 ```python

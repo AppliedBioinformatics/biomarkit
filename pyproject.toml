@@ -1,24 +1,35 @@
 [project]
 name = "biomarkit"
-version = "0.1.0"
+version = "1.0.0"
 description = "Downloads full-text scientific publications from a Scopus query and converts them into standardised Markdown."
+readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.12,<3.14"
+authors = [{ name = "Jack Bruton", email = "jack.bruton@hotmail.com" }]
 dependencies = [
-    "coverage>=7.11.0",
-    "dotenv>=0.9.9",
     "mineru[pipeline]>=3.4.0",
     "openai>=1.0.0",
     "pandas>=2.3.3",
     "playwright>=1.56.0",
     "plotly>=6.5.0",
     "pydantic>=2.12.0",
-    "pytest>=8.4.2",
+    "python-dotenv>=1.0.0",
     "requests>=2.32.5",
     "torch==2.9.1",
     "torchvision==0.24.1",
     "tqdm>=4.67.0",
     "wiley-tdm>=1.0.0",
 ]
+
+[project.optional-dependencies]
+dev = ["coverage>=7.11.0", "pytest>=8.4.2"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["biomarkit"]
 
 [tool.uv]
 index-strategy = "unsafe-best-match"

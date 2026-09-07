@@ -1,9 +1,9 @@
-import pytest
+﻿import pytest
 from unittest.mock import patch, MagicMock
 from pathlib import Path
-from text_download.apis.clients.taylor_and_francis import TaylorFrancisClient
-from text_download.apis.abc.publisher_api import PublisherApi
-from text_download.basemodels.publication import Publication
+from biomarkit.text_download.apis.clients.taylor_and_francis import TaylorFrancisClient
+from biomarkit.text_download.apis.abc.publisher_api import PublisherApi
+from biomarkit.text_download.basemodels.publication import Publication
 
 
 @pytest.fixture

@@ -1,10 +1,10 @@
-import pytest
+﻿import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock, PropertyMock
 
-from text_download.apis.abc.playwright_publisher_api import PlaywrightPublisherApi
-from text_download.apis.abc.publisher_api import PublisherApi
-from text_download.basemodels.publication import Publication
+from biomarkit.text_download.apis.abc.playwright_publisher_api import PlaywrightPublisherApi
+from biomarkit.text_download.apis.abc.publisher_api import PublisherApi
+from biomarkit.text_download.basemodels.publication import Publication
 
 
 # --- Concrete dummy subclass (provides the abstract download_paper method) ---
@@ -22,16 +22,16 @@ def publications():
     ]
 
 
-MODULE = "text_download.apis.abc.playwright_publisher_api"
+MODULE = "biomarkit.text_download.apis.abc.playwright_publisher_api"
 
 
 def _make_client(publications):
     """Helper to build a DummyPlaywrightClient with all config patched out."""
     with patch(f"{MODULE}.API_URL_TO_NAME", {"unpaywall": "https://api.unpaywall.org/v2/"}), \
-         patch("text_download.apis.abc.publisher_api.API_URL_TO_NAME", {"dummy": "http://dummy"}), \
-         patch("text_download.apis.abc.publisher_api.API_KEY_TO_NAME", {"dummy": ""}), \
-         patch("text_download.apis.abc.publisher_api.USER_EMAIL", "test@example.com"), \
-         patch("text_download.apis.abc.publisher_api.DOWNLOAD_DIR", Path("/tmp/downloads")), \
+         patch("biomarkit.text_download.apis.abc.publisher_api.API_URL_TO_NAME", {"dummy": "http://dummy"}), \
+         patch("biomarkit.text_download.apis.abc.publisher_api.API_KEY_TO_NAME", {"dummy": ""}), \
+         patch("biomarkit.text_download.apis.abc.publisher_api.USER_EMAIL", "test@example.com"), \
+         patch("biomarkit.text_download.apis.abc.publisher_api.DOWNLOAD_DIR", Path("/tmp/downloads")), \
          patch.object(PublisherApi, "_test_url", return_value=True):
         return DummyPlaywrightClient(name="dummy", publication_list=publications)
 

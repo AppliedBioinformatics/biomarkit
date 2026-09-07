@@ -1,10 +1,10 @@
-import sqlite3
+﻿import sqlite3
 import pytest
 import os
 from pathlib import Path
-from config import TMP_DIR
-from text_download.basemodels.publication import Publication
-from text_download.database.database import create_database, insert_row
+from biomarkit.config import TMP_DIR
+from biomarkit.text_download.basemodels.publication import Publication
+from biomarkit.text_download.database.database import create_database, insert_row
 
 TMP_DB = TMP_DIR / "tests_tmp" / "test_tt_controller.sqlite"
 
@@ -99,7 +99,7 @@ def mixed_publications(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_check_cache_creates_db_if_missing(uncached_publications):
-    from text_transformation.controller.controller import Controller
+    from biomarkit.text_transformation.controller.controller import Controller
 
     test_db = TMP_DIR / "tests_tmp" / "test_check_cache.sqlite"
     if test_db.exists():
@@ -113,7 +113,7 @@ def test_check_cache_creates_db_if_missing(uncached_publications):
 
 
 def test_check_cache_does_not_raise_if_db_exists(uncached_publications):
-    from text_transformation.controller.controller import Controller
+    from biomarkit.text_transformation.controller.controller import Controller
 
     test_db = TMP_DIR / "tests_tmp" / "test_check_cache.sqlite"
     create_database(test_db)
@@ -128,7 +128,7 @@ def test_check_cache_does_not_raise_if_db_exists(uncached_publications):
 # ---------------------------------------------------------------------------
 
 def test_filter_uncached_removes_publications_with_no_filepath(mixed_publications):
-    from text_transformation.controller.controller import Controller
+    from biomarkit.text_transformation.controller.controller import Controller
 
     pub_a, pub_b, pub_c, pub_d = mixed_publications
     controller = Controller(publication_list=list(mixed_publications))
@@ -141,7 +141,7 @@ def test_filter_uncached_removes_publications_with_no_filepath(mixed_publication
 
 
 def test_filter_uncached_all_discarded(uncached_publications):
-    from text_transformation.controller.controller import Controller
+    from biomarkit.text_transformation.controller.controller import Controller
 
     controller = Controller(publication_list=uncached_publications)
     controller._filter_uncached_publications()
@@ -150,7 +150,7 @@ def test_filter_uncached_all_discarded(uncached_publications):
 
 
 def test_filter_uncached_none_discarded(mixed_publications):
-    from text_transformation.controller.controller import Controller
+    from biomarkit.text_transformation.controller.controller import Controller
 
     pub_a, pub_b, pub_c, _ = mixed_publications
     controller = Controller(publication_list=[pub_a, pub_b, pub_c])
@@ -164,7 +164,7 @@ def test_filter_uncached_none_discarded(mixed_publications):
 # ---------------------------------------------------------------------------
 
 def test_update_sets_all_three_filepaths(tmp_path, uncached_publications):
-    from text_transformation.controller.controller import Controller
+    from biomarkit.text_transformation.controller.controller import Controller
 
     pub = uncached_publications[0]
     doi = pub.doi
@@ -193,7 +193,7 @@ def test_update_sets_all_three_filepaths(tmp_path, uncached_publications):
 
 @pytest.mark.skipif(os.name == 'nt', reason="Permission issues on Windows")
 def test_update_sets_only_publication_filepath_when_no_markdown(tmp_path, uncached_publications):
-    from text_transformation.controller.controller import Controller
+    from biomarkit.text_transformation.controller.controller import Controller
 
     pub = uncached_publications[0]
     pub_file = tmp_path / "pub.pdf"
@@ -217,7 +217,7 @@ def test_update_sets_only_publication_filepath_when_no_markdown(tmp_path, uncach
 
 @pytest.mark.skipif(os.name == 'nt', reason="Permission issues on Windows")
 def test_update_skips_publication_not_in_cache(uncached_publications):
-    from text_transformation.controller.controller import Controller
+    from biomarkit.text_transformation.controller.controller import Controller
 
     _setup_db([])  # Empty DB.
     pub = uncached_publications[0]
@@ -234,7 +234,7 @@ def test_update_skips_publication_not_in_cache(uncached_publications):
 # ---------------------------------------------------------------------------
 
 def test_update_document_types_sets_xml_for_xml_file(tmp_path):
-    from text_transformation.controller.controller import Controller
+    from biomarkit.text_transformation.controller.controller import Controller
 
     xml_file = tmp_path / "paper.xml"
     xml_file.touch()
@@ -247,7 +247,7 @@ def test_update_document_types_sets_xml_for_xml_file(tmp_path):
 
 
 def test_update_document_types_leaves_pdf_unchanged(tmp_path):
-    from text_transformation.controller.controller import Controller
+    from biomarkit.text_transformation.controller.controller import Controller
 
     pdf_file = tmp_path / "paper.pdf"
     pdf_file.touch()
@@ -264,7 +264,7 @@ def test_update_document_types_leaves_pdf_unchanged(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_sort_puts_publications_in_correct_lists(mixed_publications):
-    from text_transformation.controller.controller import Controller
+    from biomarkit.text_transformation.controller.controller import Controller
 
     pub_a, pub_b, pub_c, _ = mixed_publications
     controller = Controller(publication_list=[pub_a, pub_b, pub_c])
@@ -276,7 +276,7 @@ def test_sort_puts_publications_in_correct_lists(mixed_publications):
 
 
 def test_sort_uncached_publication_is_skipped(mixed_publications):
-    from text_transformation.controller.controller import Controller
+    from biomarkit.text_transformation.controller.controller import Controller
 
     _, _, _, pub_d = mixed_publications
     controller = Controller(publication_list=[pub_d])
@@ -293,7 +293,7 @@ def test_sort_uncached_publication_is_skipped(mixed_publications):
 
 @pytest.mark.skipif(os.name == 'nt', reason="Permission issues on Windows")
 def test_prepare_publications_full_pipeline(tmp_path):
-    from text_transformation.controller.controller import Controller
+    from biomarkit.text_transformation.controller.controller import Controller
 
     pub_file = tmp_path / "pub.pdf"
     raw_file = tmp_path / "raw.md"

@@ -1,6 +1,6 @@
-import sqlite3
-from config import TMP_DIR
-from text_download.database.database import create_database, insert_row, get_row_for_doi, update_content_json_filepath, update_final_md_filepath
+﻿import sqlite3
+from biomarkit.config import TMP_DIR
+from biomarkit.text_download.database.database import create_database, insert_row, get_row_for_doi, update_content_json_filepath, update_final_md_filepath
 
 def test_create_database_success():
     """

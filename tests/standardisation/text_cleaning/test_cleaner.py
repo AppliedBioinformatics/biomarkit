@@ -1,15 +1,15 @@
-import json
+﻿import json
 import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from standardisation.content_list.schema import (
+from biomarkit.standardisation.content_list.schema import (
     ImageSource, ImageContent, ImageBlock,
     ParagraphBlock, ParagraphContent,
     TextSpan, TitleBlock, TitleContent,
 )
-from standardisation.text_cleaning.cleaner import Cleaner
-from text_download.basemodels.publication import Publication
+from biomarkit.standardisation.text_cleaning.cleaner import Cleaner
+from biomarkit.text_download.basemodels.publication import Publication
 
 _BBOX = (0, 0, 0, 0)
 
@@ -231,7 +231,7 @@ def test_find_introduction_start_regex_path():
     cleaner = make_cleaner()
     # "Background" starts with B — not affected by the Roman numeral prefix strip.
     blocks = [make_paragraph("abstract"), make_title("Background")]
-    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier") as mock_llm:
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier") as mock_llm:
         result = cleaner._find_introduction_start(blocks)
     mock_llm.assert_not_called()
     intro = next(b for b in result if b.type == "title")
@@ -242,7 +242,7 @@ def test_find_introduction_start_picks_highest_level_heading():
     cleaner = make_cleaner()
     # Level 1 "Introduction" and level 2 "Introduction" both match — level 1 wins, level 2 is dropped.
     blocks = [make_title("Introduction", level=1), make_title("Introduction", level=2)]
-    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier"):
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier"):
         result = cleaner._find_introduction_start(blocks)
     title_blocks = [b for b in result if b.type == "title"]
     assert len(title_blocks) == 1
@@ -254,7 +254,7 @@ def test_find_introduction_start_drops_lower_level_duplicate():
     # Simulates "# Introduction" inserted by cleaner + "## 1 Introduction" from the article.
     para = make_paragraph("body text")
     blocks = [make_title("Introduction", level=1), make_title("1 Introduction", level=2), para]
-    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier"):
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier"):
         result = cleaner._find_introduction_start(blocks)
     title_blocks = [b for b in result if b.type == "title"]
     assert len(title_blocks) == 1
@@ -270,7 +270,7 @@ def test_find_introduction_start_llm_fallback():
     blocks = [make_paragraph("abstract text"), make_paragraph("more text")]
     mock_instance = MagicMock()
     mock_instance.classify_intro.return_value = 0
-    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
         result = cleaner._find_introduction_start(blocks)
     mock_instance.classify_intro.assert_called_once()
     assert result[0].type == "title"
@@ -282,7 +282,7 @@ def test_find_introduction_start_llm_returns_none(caplog):
     blocks = [make_paragraph("text")]
     mock_instance = MagicMock()
     mock_instance.classify_intro.return_value = None
-    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
         with caplog.at_level("WARNING"):
             result = cleaner._find_introduction_start(blocks)
     assert result == blocks
@@ -301,7 +301,7 @@ def test_enforce_imrad_headings_regex_path_no_llm():
         make_title("Results"),
         make_title("Discussion"),
     ]
-    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier") as mock_llm:
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier") as mock_llm:
         cleaner._enforce_imrad_headings(blocks)
     mock_llm.assert_not_called()
 
@@ -314,7 +314,7 @@ def test_enforce_imrad_headings_renames_methods_via_llm():
     mock_instance.classify_methods.return_value = 1
     mock_instance.classify_results.return_value = None
     mock_instance.classify_discussion.return_value = None
-    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
         cleaner._enforce_imrad_headings(blocks)
     assert blocks[1].content.title_content[0].content == "Methods"
 
@@ -326,7 +326,7 @@ def test_enforce_imrad_headings_discussion_optional_no_warning(caplog):
     mock_instance.classify_methods.return_value = None
     mock_instance.classify_results.return_value = None
     mock_instance.classify_discussion.return_value = None
-    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
         with caplog.at_level("WARNING"):
             cleaner._enforce_imrad_headings(blocks)
     assert "Discussion" not in caplog.text
@@ -378,7 +378,7 @@ def _write_pub(tmp_path: Path) -> Publication:
 def test_clean_from_json_writes_markdown_file(tmp_path):
     pub = _write_pub(tmp_path)
     cleaner = make_cleaner(force_imrad_structure=False)
-    with patch("standardisation.text_cleaning.cleaner.FINAL_MARKDOWN_DIR", tmp_path):
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.FINAL_MARKDOWN_DIR", tmp_path):
         markdown = cleaner.clean_from_json(pub)
     assert isinstance(markdown, str)
     assert len(markdown) > 0
@@ -389,8 +389,8 @@ def test_clean_from_json_writes_markdown_file(tmp_path):
 def test_clean_from_json_does_not_call_llm_when_imrad_disabled(tmp_path):
     pub = _write_pub(tmp_path)
     cleaner = make_cleaner(force_imrad_structure=False)
-    with patch("standardisation.text_cleaning.cleaner.FINAL_MARKDOWN_DIR", tmp_path), \
-         patch("standardisation.text_cleaning.cleaner.LlamaClassifier") as mock_llm:
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.FINAL_MARKDOWN_DIR", tmp_path), \
+         patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier") as mock_llm:
         cleaner.clean_from_json(pub)
     mock_llm.assert_not_called()
 
@@ -411,7 +411,7 @@ def test_clean_all_calls_clean_from_json_for_each_pub(tmp_path):
 
 def test_clean_from_json_updates_cache(tmp_path):
     import sqlite3
-    from text_download.database.database import create_database
+    from biomarkit.text_download.database.database import create_database
     db = tmp_path / "cache.db"
     create_database(db)
     conn = sqlite3.connect(db)
@@ -425,7 +425,7 @@ def test_clean_from_json_updates_cache(tmp_path):
     pub = _write_pub(tmp_path)
     cleaner = make_cleaner(force_imrad_structure=False)
     cleaner.cache = db
-    with patch("standardisation.text_cleaning.cleaner.FINAL_MARKDOWN_DIR", tmp_path):
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.FINAL_MARKDOWN_DIR", tmp_path):
         cleaner.clean_from_json(pub)
 
     conn = sqlite3.connect(db)
@@ -445,7 +445,7 @@ def test_find_core_text_end_inserts_end_marker_via_llm():
     blocks = [make_title("Introduction"), make_paragraph("body"), make_title("References")]
     mock_instance = MagicMock()
     mock_instance.classify_end.return_value = 2
-    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
         result = cleaner._find_core_text_end(blocks)
     titles = [b.content.title_content[0].content for b in result if b.type == "title"]
     assert "end" in titles
@@ -456,7 +456,7 @@ def test_find_core_text_end_llm_returns_none_logs_warning(caplog):
     blocks = [make_title("Introduction"), make_paragraph("body")]
     mock_instance = MagicMock()
     mock_instance.classify_end.return_value = None
-    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
         with caplog.at_level("WARNING"):
             result = cleaner._find_core_text_end(blocks)
     assert result == blocks
@@ -466,7 +466,7 @@ def test_find_core_text_end_llm_returns_none_logs_warning(caplog):
 def test_find_core_text_end_no_headings_logs_warning(caplog):
     cleaner = make_cleaner()
     blocks = [make_paragraph("no headings here")]
-    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier") as mock_llm:
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier") as mock_llm:
         with caplog.at_level("WARNING"):
             result = cleaner._find_core_text_end(blocks)
     mock_llm.assert_not_called()
@@ -487,7 +487,7 @@ def test_find_core_text_end_rejects_index_before_introduction(caplog):
     ]
     mock_instance = MagicMock()
     mock_instance.classify_end.return_value = 0
-    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
         with caplog.at_level("WARNING"):
             result = cleaner._find_core_text_end(blocks)
     assert result == blocks
@@ -506,7 +506,7 @@ def test_find_core_text_end_rejects_index_equal_to_introduction(caplog):
     ]
     mock_instance = MagicMock()
     mock_instance.classify_end.return_value = 0  # index of Introduction
-    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
         with caplog.at_level("WARNING"):
             result = cleaner._find_core_text_end(blocks)
     assert result == blocks
@@ -526,7 +526,7 @@ def test_find_core_text_end_accepts_index_after_methods_when_no_introduction(cap
     ]
     mock_instance = MagicMock()
     mock_instance.classify_end.return_value = 4  # Acknowledgments — after Methods
-    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
         result = cleaner._find_core_text_end(blocks)
     titles = [b.content.title_content[0].content for b in result if b.type == "title"]
     assert "end" in titles
@@ -549,7 +549,7 @@ def test_find_core_text_end_full_pipeline_empty_output_prevented():
     ]
     mock_instance = MagicMock()
     mock_instance.classify_end.return_value = 0  # bad LLM pick — front-matter
-    with patch("standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
         result = cleaner._find_core_text_end(blocks)
     # No "end" marker inserted — _trim_to_core_text will keep everything from Introduction onward
     trimmed = cleaner._trim_to_core_text(result)

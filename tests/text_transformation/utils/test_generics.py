@@ -1,18 +1,18 @@
-import pytest
+﻿import pytest
 import os
 from pathlib import Path
 from unittest.mock import patch
-from config import TMP_DIR
+from biomarkit.config import TMP_DIR
 import sys
 
 RAW_MD = TMP_DIR / "test_raw_markdown"
 FINAL_MD = TMP_DIR / "test_final_markdown"
 
 
-@patch("text_transformation.utils.generics.JSON_STRUCT_DIR", RAW_MD)
-@patch("text_transformation.utils.generics.FINAL_MARKDOWN_DIR", FINAL_MD)
+@patch("biomarkit.text_transformation.utils.generics.JSON_STRUCT_DIR", RAW_MD)
+@patch("biomarkit.text_transformation.utils.generics.FINAL_MARKDOWN_DIR", FINAL_MD)
 def test_check_transformation_filepaths_creates_directories():
-    from text_transformation.utils.generics import check_transformation_filepaths
+    from biomarkit.text_transformation.utils.generics import check_transformation_filepaths
 
     # Ensure dirs don't exist before the call.
     for d in (RAW_MD, FINAL_MD):
@@ -29,10 +29,10 @@ def test_check_transformation_filepaths_creates_directories():
         d.rmdir()
 
 
-@patch("text_transformation.utils.generics.JSON_STRUCT_DIR", RAW_MD)
-@patch("text_transformation.utils.generics.FINAL_MARKDOWN_DIR", FINAL_MD)
+@patch("biomarkit.text_transformation.utils.generics.JSON_STRUCT_DIR", RAW_MD)
+@patch("biomarkit.text_transformation.utils.generics.FINAL_MARKDOWN_DIR", FINAL_MD)
 def test_check_transformation_filepaths_existing_directories():
-    from text_transformation.utils.generics import check_transformation_filepaths
+    from biomarkit.text_transformation.utils.generics import check_transformation_filepaths
 
     # Pre-create dirs.
     for d in (RAW_MD, FINAL_MD):
@@ -53,9 +53,9 @@ FAKE_VENV_DIR = TMP_DIR / "tests_tmp"
 FAKE_VENV_MINERU = FAKE_VENV_DIR / ".venv" / "Scripts" / "mineru.exe"
 
 
-@patch("text_transformation.utils.generics.BASE_DIR", FAKE_VENV_DIR)
+@patch("biomarkit.text_transformation.utils.generics.BASE_DIR", FAKE_VENV_DIR)
 def test_find_mineru_finds_venv_executable():
-    from text_transformation.utils.generics import check_mineru
+    from biomarkit.text_transformation.utils.generics import check_mineru
 
     FAKE_VENV_MINERU.parent.mkdir(parents=True, exist_ok=True)
     FAKE_VENV_MINERU.touch()
@@ -67,10 +67,10 @@ def test_find_mineru_finds_venv_executable():
     FAKE_VENV_MINERU.unlink()
 
 
-@patch("text_transformation.utils.generics.BASE_DIR", FAKE_VENV_DIR)
-@patch("text_transformation.utils.generics.shutil.which", return_value="C:/tools/mineru.exe")
+@patch("biomarkit.text_transformation.utils.generics.BASE_DIR", FAKE_VENV_DIR)
+@patch("biomarkit.text_transformation.utils.generics.shutil.which", return_value="C:/tools/mineru.exe")
 def test_find_mineru_falls_back_to_global(mock_which):
-    from text_transformation.utils.generics import check_mineru
+    from biomarkit.text_transformation.utils.generics import check_mineru
 
     if FAKE_VENV_MINERU.exists():
         FAKE_VENV_MINERU.unlink()
@@ -81,10 +81,10 @@ def test_find_mineru_falls_back_to_global(mock_which):
     mock_which.assert_called_once_with("mineru")
 
 
-@patch("text_transformation.utils.generics.BASE_DIR", FAKE_VENV_DIR)
-@patch("text_transformation.utils.generics.shutil.which", return_value=None)
+@patch("biomarkit.text_transformation.utils.generics.BASE_DIR", FAKE_VENV_DIR)
+@patch("biomarkit.text_transformation.utils.generics.shutil.which", return_value=None)
 def test_find_mineru_raises_when_not_found(mock_which):
-    from text_transformation.utils.generics import check_mineru
+    from biomarkit.text_transformation.utils.generics import check_mineru
 
     if FAKE_VENV_MINERU.exists():
         FAKE_VENV_MINERU.unlink()
@@ -100,7 +100,7 @@ def test_find_mineru_raises_when_not_found(mock_which):
 def test_check_gpu_available():
     """check_gpu returns True when CUDA is available."""
     import torch
-    from text_transformation.utils.generics import check_gpu
+    from biomarkit.text_transformation.utils.generics import check_gpu
 
     with patch.object(torch.cuda, "is_available", return_value=True), \
          patch.object(torch.cuda, "device_count", return_value=1), \
@@ -113,7 +113,7 @@ def test_check_gpu_available():
 def test_check_gpu_unavailable():
     """check_gpu returns False and warns when CUDA is not available."""
     import torch
-    from text_transformation.utils.generics import check_gpu
+    from biomarkit.text_transformation.utils.generics import check_gpu
 
     with patch.object(torch.cuda, "is_available", return_value=False), \
          patch.object(torch.cuda, "device_count", return_value=0):
@@ -126,12 +126,12 @@ def test_check_gpu_unavailable():
 # prepare_bulk_transformation
 # ---------------------------------------------------------------------------
 
-@patch("text_transformation.utils.generics.check_cache_for_markdowns")
-@patch("text_transformation.utils.generics.check_mineru")
-@patch("text_transformation.utils.generics.check_gpu", return_value=True)
-@patch("text_transformation.utils.generics.check_transformation_filepaths")
+@patch("biomarkit.text_transformation.utils.generics.check_cache_for_markdowns")
+@patch("biomarkit.text_transformation.utils.generics.check_mineru")
+@patch("biomarkit.text_transformation.utils.generics.check_gpu", return_value=True)
+@patch("biomarkit.text_transformation.utils.generics.check_transformation_filepaths")
 def test_prepare_bulk_transformation_success(mock_filepaths, mock_gpu, mock_mineru, mock_cache):
-    from text_transformation.utils.generics import prepare_bulk_transformation
+    from biomarkit.text_transformation.utils.generics import prepare_bulk_transformation
 
     prepare_bulk_transformation()
 
@@ -140,12 +140,12 @@ def test_prepare_bulk_transformation_success(mock_filepaths, mock_gpu, mock_mine
     mock_mineru.assert_called_once()
 
 
-@patch("text_transformation.utils.generics.check_cache_for_markdowns")
-@patch("text_transformation.utils.generics.check_mineru")
-@patch("text_transformation.utils.generics.check_gpu", return_value=False)
-@patch("text_transformation.utils.generics.check_transformation_filepaths")
+@patch("biomarkit.text_transformation.utils.generics.check_cache_for_markdowns")
+@patch("biomarkit.text_transformation.utils.generics.check_mineru")
+@patch("biomarkit.text_transformation.utils.generics.check_gpu", return_value=False)
+@patch("biomarkit.text_transformation.utils.generics.check_transformation_filepaths")
 def test_prepare_bulk_transformation_raises_when_no_gpu(mock_filepaths, mock_gpu, mock_mineru, mock_cache):
-    from text_transformation.utils.generics import prepare_bulk_transformation
+    from biomarkit.text_transformation.utils.generics import prepare_bulk_transformation
 
     with pytest.raises(RuntimeError, match="No GPU recognised"):
         prepare_bulk_transformation()
@@ -153,34 +153,34 @@ def test_prepare_bulk_transformation_raises_when_no_gpu(mock_filepaths, mock_gpu
     mock_mineru.assert_not_called()
 
 
-@patch("text_transformation.utils.generics.check_cache_for_markdowns")
-@patch("text_transformation.utils.generics.check_mineru", side_effect=FileNotFoundError("MinerU executable not found"))
-@patch("text_transformation.utils.generics.check_gpu", return_value=True)
-@patch("text_transformation.utils.generics.check_transformation_filepaths")
+@patch("biomarkit.text_transformation.utils.generics.check_cache_for_markdowns")
+@patch("biomarkit.text_transformation.utils.generics.check_mineru", side_effect=FileNotFoundError("MinerU executable not found"))
+@patch("biomarkit.text_transformation.utils.generics.check_gpu", return_value=True)
+@patch("biomarkit.text_transformation.utils.generics.check_transformation_filepaths")
 def test_prepare_bulk_transformation_raises_when_mineru_missing(mock_filepaths, mock_gpu, mock_mineru, mock_cache):
-    from text_transformation.utils.generics import prepare_bulk_transformation
+    from biomarkit.text_transformation.utils.generics import prepare_bulk_transformation
 
     with pytest.raises(FileNotFoundError, match="MinerU executable not found"):
         prepare_bulk_transformation()
 
 
 def test_prepare_bulk_transformation_rejects_unknown_endpoint():
-    from text_transformation.utils.generics import prepare_bulk_transformation
+    from biomarkit.text_transformation.utils.generics import prepare_bulk_transformation
 
     with pytest.raises(ValueError, match="Invalid mineru_backend"):
         prepare_bulk_transformation(mineru_backend="remote")
 
 
-@patch("text_transformation.utils.generics.check_cache_for_markdowns")
-@patch("text_transformation.utils.generics.check_mineru")
-@patch("text_transformation.utils.generics.check_gpu", return_value=False)
-@patch("text_transformation.utils.generics.check_transformation_filepaths")
-@patch("text_transformation.utils.generics.check_vllm_config")
+@patch("biomarkit.text_transformation.utils.generics.check_cache_for_markdowns")
+@patch("biomarkit.text_transformation.utils.generics.check_mineru")
+@patch("biomarkit.text_transformation.utils.generics.check_gpu", return_value=False)
+@patch("biomarkit.text_transformation.utils.generics.check_transformation_filepaths")
+@patch("biomarkit.text_transformation.utils.generics.check_vllm_config")
 def test_prepare_bulk_transformation_vllm_tolerates_missing_gpu(
     mock_vllm, mock_filepaths, mock_gpu, mock_mineru, mock_cache
 ):
     """With remote inference the missing local GPU is a warning, not an error."""
-    from text_transformation.utils.generics import prepare_bulk_transformation
+    from biomarkit.text_transformation.utils.generics import prepare_bulk_transformation
 
     prepare_bulk_transformation(mineru_backend="vllm")
 
@@ -188,16 +188,16 @@ def test_prepare_bulk_transformation_vllm_tolerates_missing_gpu(
     mock_mineru.assert_called_once()
 
 
-@patch("text_transformation.utils.generics.check_cache_for_markdowns")
-@patch("text_transformation.utils.generics.check_mineru")
-@patch("text_transformation.utils.generics.check_gpu", return_value=True)
-@patch("text_transformation.utils.generics.check_transformation_filepaths")
+@patch("biomarkit.text_transformation.utils.generics.check_cache_for_markdowns")
+@patch("biomarkit.text_transformation.utils.generics.check_mineru")
+@patch("biomarkit.text_transformation.utils.generics.check_gpu", return_value=True)
+@patch("biomarkit.text_transformation.utils.generics.check_transformation_filepaths")
 def test_prepare_bulk_transformation_vllm_raises_when_secrets_missing(
     mock_filepaths, mock_gpu, mock_mineru, mock_cache
 ):
-    from text_transformation.utils.generics import prepare_bulk_transformation
+    from biomarkit.text_transformation.utils.generics import prepare_bulk_transformation
 
-    with patch("config.MINERU_VLLM_ENDPOINT", None), patch("config.MINERU_API_KEY", None):
+    with patch("biomarkit.config.MINERU_VLLM_ENDPOINT", None), patch("biomarkit.config.MINERU_API_KEY", None):
         with pytest.raises(ValueError, match="MINERU_VLLM_ENDPOINT and MINERU_API_KEY"):
             prepare_bulk_transformation(mineru_backend="vllm")
 
@@ -209,10 +209,10 @@ def test_prepare_bulk_transformation_vllm_raises_when_secrets_missing(
 # ---------------------------------------------------------------------------
 
 def test_check_vllm_config_passes_when_both_set():
-    from text_transformation.utils.generics import check_vllm_config
+    from biomarkit.text_transformation.utils.generics import check_vllm_config
 
-    with patch("config.MINERU_VLLM_ENDPOINT", "http://vllm-host:30000"), \
-         patch("config.MINERU_API_KEY", "test-key"):
+    with patch("biomarkit.config.MINERU_VLLM_ENDPOINT", "http://vllm-host:30000"), \
+         patch("biomarkit.config.MINERU_API_KEY", "test-key"):
         check_vllm_config()
 
 
@@ -224,9 +224,9 @@ def test_check_vllm_config_passes_when_both_set():
     ("   ", "test-key", "MINERU_VLLM_ENDPOINT"),
 ])
 def test_check_vllm_config_raises_when_unfilled(endpoint, key, expected):
-    from text_transformation.utils.generics import check_vllm_config
+    from biomarkit.text_transformation.utils.generics import check_vllm_config
 
-    with patch("config.MINERU_VLLM_ENDPOINT", endpoint), patch("config.MINERU_API_KEY", key):
+    with patch("biomarkit.config.MINERU_VLLM_ENDPOINT", endpoint), patch("biomarkit.config.MINERU_API_KEY", key):
         with pytest.raises(ValueError, match=expected):
             check_vllm_config()
 
@@ -264,10 +264,10 @@ def _make_test_db(rows: list[dict]) -> None:
         )
 
 
-@patch("text_transformation.utils.generics.DB_CACHE_FILE_NAME", TMP_TEST_DB)
+@patch("biomarkit.text_transformation.utils.generics.DB_CACHE_FILE_NAME", TMP_TEST_DB)
 def test_check_cache_for_markdowns_empty_db(caplog):
     """Logs correct counts when the cache is empty."""
-    from text_transformation.utils.generics import check_cache_for_markdowns
+    from biomarkit.text_transformation.utils.generics import check_cache_for_markdowns
 
     _make_test_db([])
 
@@ -279,10 +279,10 @@ def test_check_cache_for_markdowns_empty_db(caplog):
     assert "0 with final markdown" in caplog.text
 
 @pytest.mark.skipif(os.name == 'nt', reason="Permission issues on Windows")
-@patch("text_transformation.utils.generics.DB_CACHE_FILE_NAME", TMP_TEST_DB)
+@patch("biomarkit.text_transformation.utils.generics.DB_CACHE_FILE_NAME", TMP_TEST_DB)
 def test_check_cache_for_markdowns_mixed(caplog):
     """Logs correct counts for a mix of processed and unprocessed publications."""
-    from text_transformation.utils.generics import check_cache_for_markdowns
+    from biomarkit.text_transformation.utils.generics import check_cache_for_markdowns
 
     _make_test_db([
         {"doi": "10.1/a", "downloaded_from": "unpaywall", "publication_filepath": "/f/a.pdf",
@@ -302,10 +302,10 @@ def test_check_cache_for_markdowns_mixed(caplog):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Does not run on Windows")
-@patch("text_transformation.utils.generics.DB_CACHE_FILE_NAME", TMP_TEST_DB)
+@patch("biomarkit.text_transformation.utils.generics.DB_CACHE_FILE_NAME", TMP_TEST_DB)
 def test_check_cache_for_markdowns_returns_none():
     """Function returns None (log-only, no return value)."""
-    from text_transformation.utils.generics import check_cache_for_markdowns
+    from biomarkit.text_transformation.utils.generics import check_cache_for_markdowns
 
     _make_test_db([])
     result = check_cache_for_markdowns()

@@ -1,15 +1,15 @@
-import pytest
+﻿import pytest
 from unittest.mock import patch, MagicMock
 from tests.text_download.controller.test_controller import publications
-from text_download.apis.clients.wiley import WileyClient
-from config import TMP_DIR
+from biomarkit.text_download.apis.clients.wiley import WileyClient
+from biomarkit.config import TMP_DIR
 from pathlib import Path
 
 def test_wiley_client_init(publications):
     fake_tdm_client = MagicMock()
 
-    with patch("text_download.apis.clients.wiley.TDMClient", return_value=fake_tdm_client) as mock_tdm, \
-         patch("text_download.apis.clients.wiley.WILEY_TDM_TOKEN", "test_token"):
+    with patch("biomarkit.text_download.apis.clients.wiley.TDMClient", return_value=fake_tdm_client) as mock_tdm, \
+         patch("biomarkit.text_download.apis.clients.wiley.WILEY_TDM_TOKEN", "test_token"):
 
         client = WileyClient(publication_list=publications)
 
@@ -19,7 +19,7 @@ def test_wiley_client_init(publications):
 
 def test_wiley_client_missing_token(publications):
     # Patch the token to None
-    with patch("text_download.apis.clients.wiley.WILEY_TDM_TOKEN", None):
+    with patch("biomarkit.text_download.apis.clients.wiley.WILEY_TDM_TOKEN", None):
         with pytest.raises(ValueError, match="WILEY_TDM_TOKEN environment variable not set"):
             WileyClient(publication_list=publications)
 

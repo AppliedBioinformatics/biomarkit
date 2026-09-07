@@ -1,17 +1,17 @@
-import sqlite3
+﻿import sqlite3
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
 
-from text_download.utils.generics import (
+from biomarkit.text_download.utils.generics import (
     clean_publications,
     truncate_labels,
     validate_pdf_file,
     validate_xml_file,
     validate_publications,
 )
-from text_download.basemodels.publication import Publication, DocumentType
+from biomarkit.text_download.basemodels.publication import Publication, DocumentType
 
 
 # ---------------------------------------------------------------------------

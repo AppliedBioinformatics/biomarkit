@@ -1,8 +1,8 @@
-import pytest
+﻿import pytest
 from tests.text_download.controller.test_controller import publications
 from unittest.mock import patch
-from text_download.apis.clients.elsevier import ElsevierClient
-from config import API_KEY_TO_NAME
+from biomarkit.text_download.apis.clients.elsevier import ElsevierClient
+from biomarkit.config import API_KEY_TO_NAME
 from pathlib import Path
 
 def test_elsevier_client_init(publications):

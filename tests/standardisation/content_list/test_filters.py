@@ -1,5 +1,5 @@
-import pytest
-from standardisation.content_list.schema import (
+﻿import pytest
+from biomarkit.standardisation.content_list.schema import (
     ChartBlock, ChartContent,
     EquationInterlineBlock, EquationInterlineContent,
     ImageBlock, ImageContent, ImageSource,
@@ -13,7 +13,7 @@ from standardisation.content_list.schema import (
     TableBlock, TableContent,
     TextSpan, TitleBlock, TitleContent,
 )
-from standardisation.content_list.filters import (
+from biomarkit.standardisation.content_list.filters import (
     remove_boilerplate,
     remove_figures,
     remove_latex,

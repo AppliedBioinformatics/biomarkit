@@ -9,19 +9,22 @@ pip install --upgrade pip
 pip install uv
 uv pip install biomarkit
 ```
-### Storing publisher API keys.
-This file is required for a biomarkit run – the software will pull environment variables from your defined `secrets.env` 
-file once set up to do so. For new users we recommend storing `secrets.env` in the current working directory. 
-Alternatively, you can specify the path of your secrets.env file using the `dotenv_path` parameter and the
-following code:
-```python
-from dotenv import load_dotenv
-load_dotenv(dotenv_path="path/to/secrets.env")
+### Workspace directory and secrets.env.
+By default, biomarkit creates a `corpora/` folder in your **current working directory** and looks for `secrets.env`
+there too. To use a different location, set the `BIOMARKIT_DIR` environment variable before running your script:
+
+```bash
+# Linux/macOS
+export BIOMARKIT_DIR=/path/to/my/workspace
+
+# Windows (PowerShell)
+$env:BIOMARKIT_DIR = "C:\path\to\my\workspace"
 ```
-We provide a template [secrets.env](/secrets.env.example) file that can be copied and renamed to `secrets.env`.
-This file acts as a template for you to fill in, to store any API keys for downloading papers from specific publishers, 
-as well as other sensitive information including user emails which are required by some APIs such as 
-[Unpaywall](https://unpaywall.org/).
+
+Copy the template [secrets.env.example](/secrets.env.example) file to your workspace directory, rename it to
+`secrets.env`, and fill in your API keys. This file stores API keys for downloading papers from specific publishers,
+as well as other settings including your email address (required by some APIs such as
+[Unpaywall](https://unpaywall.org/)).
 
 ## Generating a new corpus for download.
 Biomarkit takes a [SCOPUS](https://www.scopus.com/pages/home#basic) search export in .CSV format as an input. If you are
@@ -39,8 +42,8 @@ select all results:
 6) In Python, run the function below to generate a new `biomarkit` corpus: 
 
 ```python
-from main import build_new_corpus
-build_new_corpus(name="my_new_corpus", scopus_file="/path/to/my/scopus.csv", set_active=True)
+import biomarkit
+biomarkit.build_new_corpus(name="my_new_corpus", scopus_file="/path/to/my/scopus.csv", set_active=True)
 ```
 
 The function will automatically generate the following folder structure. By default, new corpora will be built inside the
@@ -69,8 +72,8 @@ called again or restarted.
 
 To begin downloading full-text files for a corpus, run the following command: 
 ```python
-from main import download_corpus
-publications = download_corpus(check_opensource=True, generate_report=True)
+import biomarkit
+publications = biomarkit.download_corpus(check_opensource=True, generate_report=True)
 ```
 
 ### Parameters for download_corpus().
@@ -89,8 +92,8 @@ each folder to the associated DOI, you can query the sqlite.db cache, or use the
 by the function. For example:
 
 ```python
-from main import download_corpus
-publications = download_corpus()
+import biomarkit
+publications = biomarkit.download_corpus()
 
 # Get the abstract, title and DOI for each publication.
 for publication in publications:
@@ -100,7 +103,7 @@ for publication in publications:
 
 # Get the full-text filepath for each publication.
 for publication in publications:
-    print(publication.full_text_path)
+    print(publication.publication_filepath)
 ```
 
 ### A Suggestion for maximising download performance.
@@ -115,9 +118,9 @@ tool. For XML files, a built-in parser is used. To generate the JSON document st
 the active corpus, run the following code:
 
 ```python
-from main import download_corpus, transform_text
-publications = download_corpus()
-publications = transform_text(publications, mineru_backend="local-cpu", generate_report=True)
+import biomarkit
+publications = biomarkit.download_corpus()
+publications = biomarkit.transform_text(publications, mineru_backend="local-cpu", generate_report=True)
 ```
 
 This begins the process of generating the intermediate JSON structure files. Depending on the size of your corpus, 
@@ -136,15 +139,15 @@ Once you have generated JSON document structure files for all manuscripts in you
 structured markdown files with:
 
 ```python
-from main import download_corpus, transform_text, standardise_text
-publications = download_corpus()
-publications = transform_text(publications, mineru_backend="local-cpu", generate_report=True)
-publications = standardise_text(publications, 
-                                keep_figures=False, 
-                                keep_tables=True, 
-                                keep_references=False, 
-                                keep_latex=False, 
-                                force_imrad_structure=True)
+import biomarkit
+publications = biomarkit.download_corpus()
+publications = biomarkit.transform_text(publications, mineru_backend="local-cpu", generate_report=True)
+publications = biomarkit.standardise_text(publications, 
+                                          keep_figures=False, 
+                                          keep_tables=True, 
+                                          keep_references=False, 
+                                          keep_latex=False, 
+                                          force_imrad_structure=True)
 ```
 
 Running the `standardise_text()` function will generate structured Markdown files for each manuscript. These outputs can
@@ -202,7 +205,7 @@ Markdown text converison. The classifier LLM provides a more accurate classifica
 more accurate removal of boilerplate text and classification of major manuscript sections. 
 
 The biomarkit package uses [Ollama](https://ollama.com/) for interacting with a local LLM as the classifier.
-For installation instructions for Ollama please follow the documentation available [here](https://docs.ollama.com/quickstart). 
+For installation instructions for Ollama please follow the documentation available [here](https://ollama.com/download). 
 
 We recommend pre-downloading the gemma3:12b model using the command: `ollama pull gemma3:12b` once Ollama is installed on 
 your system. This will pre-download the model weights (~8GB) ready for use on your first run. Alternatively, Biomarkit

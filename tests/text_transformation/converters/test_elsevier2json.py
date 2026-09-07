@@ -1,8 +1,8 @@
-import json
+﻿import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from text_download.basemodels.publication import Publication
-from text_transformation.converters.elsevier2json import (
+from biomarkit.text_download.basemodels.publication import Publication
+from biomarkit.text_transformation.converters.elsevier2json import (
     ElsevierXmlTransformer,
     clean_text,
     get_element_text,

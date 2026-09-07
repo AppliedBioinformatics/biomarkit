@@ -1,6 +1,6 @@
-from pathlib import Path
+﻿from pathlib import Path
 from unittest.mock import patch, MagicMock
-from text_download.basemodels.publication import Publication
+from biomarkit.text_download.basemodels.publication import Publication
 
 
 def _make_pub(doi: str, tmp_path: Path) -> Publication:
@@ -26,21 +26,21 @@ FAKE_MINERU = Path("/fake/mineru.exe")
 # ---------------------------------------------------------------------------
 
 def test_init_sets_output_dir_to_raw_markdown_dir():
-    from config import JSON_STRUCT_DIR
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.config import JSON_STRUCT_DIR
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
     converter = MinerUPdfTransformer(publication_list=[])
     assert converter.output_dir == JSON_STRUCT_DIR
 
 
 def test_init_defaults_to_local_gpu():
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
     converter = MinerUPdfTransformer(publication_list=[])
     assert converter.mineru_backend == "local-gpu"
 
 
 def test_init_rejects_unknown_endpoint():
     import pytest
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
     with pytest.raises(ValueError, match="Invalid mineru_backend"):
         MinerUPdfTransformer(publication_list=[], mineru_backend="remote")
 
@@ -50,7 +50,7 @@ def test_init_rejects_unknown_endpoint():
 # ---------------------------------------------------------------------------
 
 def test_build_output_path_uses_mineru_structure(tmp_path):
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
     pub = _make_pub("10.1000/A", tmp_path)
     stem = pub.publication_filepath.stem
     converter = MinerUPdfTransformer(publication_list=[pub])
@@ -63,7 +63,7 @@ def test_build_output_path_uses_mineru_structure(tmp_path):
 
 def test_build_output_path_uses_vlm_subdir_for_vllm_endpoint(tmp_path):
     """The vlm-http-client backend nests output under vlm/, not auto/."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
     pub = _make_pub("10.1000/A", tmp_path)
     stem = pub.publication_filepath.stem
     converter = MinerUPdfTransformer(publication_list=[pub], mineru_backend="vllm")
@@ -79,7 +79,7 @@ def test_build_output_path_uses_vlm_subdir_for_vllm_endpoint(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_convert_returns_json_path(tmp_path):
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pub = _make_pub("10.1000/D", tmp_path)
     converter = MinerUPdfTransformer(publication_list=[pub])
@@ -92,7 +92,7 @@ def test_convert_returns_json_path(tmp_path):
 
 
 def test_convert_returns_none_when_json_missing(tmp_path):
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pub = _make_pub("10.1000/G", tmp_path)
     converter = MinerUPdfTransformer(publication_list=[pub])
@@ -109,7 +109,7 @@ def test_convert_returns_none_when_json_missing(tmp_path):
 
 def test_convert_all_runs_mineru_once_for_all_pubs(tmp_path):
     """All PDFs are staged into one directory and converted in a single call."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer, MINERU_OCR_LANG
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer, MINERU_OCR_LANG
 
     pubs = [_make_pub(f"10.1000/{c}", tmp_path) for c in "ABC"]
     converter = MinerUPdfTransformer(publication_list=pubs)
@@ -125,8 +125,8 @@ def test_convert_all_runs_mineru_once_for_all_pubs(tmp_path):
             _make_md(converter, pub)
         return MagicMock(returncode=0)
 
-    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run) as mock_run, \
+    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run) as mock_run, \
          patch.object(converter, "_cache_result"):
         converter.transform_all()
 
@@ -143,7 +143,7 @@ def test_convert_all_runs_mineru_once_for_all_pubs(tmp_path):
 def test_convert_all_vllm_uses_http_client_backend(tmp_path):
     """vllm mode passes -b vlm-http-client, points -u at the configured endpoint,
     exposes the API key as MINERU_VL_API_KEY, and omits the pipeline-only -l flag."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pub = _make_pub("10.1000/R", tmp_path)
     converter = MinerUPdfTransformer(publication_list=[pub], mineru_backend="vllm")
@@ -157,10 +157,10 @@ def test_convert_all_vllm_uses_http_client_backend(tmp_path):
         _make_md(converter, pub)
         return MagicMock(returncode=0)
 
-    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("text_transformation.converters.mineru_pdf_to_md.MINERU_VLLM_ENDPOINT", "http://vllm-host:30000"), \
-         patch("text_transformation.converters.mineru_pdf_to_md.MINERU_API_KEY", "test-key"), \
-         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
+    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.MINERU_VLLM_ENDPOINT", "http://vllm-host:30000"), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.MINERU_API_KEY", "test-key"), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
          patch.object(converter, "_cache_result"):
         converter.transform_all()
 
@@ -174,7 +174,7 @@ def test_convert_all_vllm_uses_http_client_backend(tmp_path):
 
 def test_convert_all_local_does_not_leak_vl_api_key(tmp_path, monkeypatch):
     """Local mode must not set MINERU_VL_API_KEY even when the secret is configured."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     monkeypatch.delenv("MINERU_VL_API_KEY", raising=False)
     pub = _make_pub("10.1000/L", tmp_path)
@@ -187,9 +187,9 @@ def test_convert_all_local_does_not_leak_vl_api_key(tmp_path, monkeypatch):
         captured["env"] = kwargs["env"]
         return MagicMock(returncode=0)
 
-    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("text_transformation.converters.mineru_pdf_to_md.MINERU_API_KEY", "test-key"), \
-         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
+    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.MINERU_API_KEY", "test-key"), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
          patch.object(converter, "_cache_result"):
         converter.transform_all()
 
@@ -197,12 +197,12 @@ def test_convert_all_local_does_not_leak_vl_api_key(tmp_path, monkeypatch):
 
 
 def test_convert_all_skips_batch_for_empty_list():
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     converter = MinerUPdfTransformer(publication_list=[])
 
-    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run") as mock_run:
+    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run") as mock_run:
         converter.transform_all()
 
     mock_run.assert_not_called()
@@ -210,7 +210,7 @@ def test_convert_all_skips_batch_for_empty_list():
 
 def test_convert_all_does_not_restage_existing_outputs(tmp_path):
     """Pubs whose .md is already on disk are cached without being reconverted."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     done_pub = _make_pub("10.1000/DONE", tmp_path)
     new_pub = _make_pub("10.1000/NEW", tmp_path)
@@ -226,8 +226,8 @@ def test_convert_all_does_not_restage_existing_outputs(tmp_path):
         _make_md(converter, new_pub)
         return MagicMock(returncode=0)
 
-    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
+    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
          patch.object(converter, "_cache_result") as mock_cache:
         converter.transform_all()
 
@@ -239,7 +239,7 @@ def test_convert_all_does_not_restage_existing_outputs(tmp_path):
 
 def test_convert_all_skips_batch_when_all_outputs_exist(tmp_path):
     """If every pub already has output on disk, no MinerU subprocess is spawned."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pubs = [_make_pub(f"10.1000/{c}", tmp_path) for c in "AB"]
     converter = MinerUPdfTransformer(publication_list=pubs)
@@ -247,8 +247,8 @@ def test_convert_all_skips_batch_when_all_outputs_exist(tmp_path):
     for pub in pubs:
         _make_md(converter, pub)
 
-    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run") as mock_run, \
+    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run") as mock_run, \
          patch.object(converter, "_cache_result") as mock_cache:
         converter.transform_all()
 
@@ -259,7 +259,7 @@ def test_convert_all_skips_batch_when_all_outputs_exist(tmp_path):
 
 def test_convert_all_nonzero_exit_still_collects_outputs(tmp_path):
     """A failed batch is not fatal — publications whose .md exists are still cached."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     ok_pub = _make_pub("10.1000/OK", tmp_path)
     bad_pub = _make_pub("10.1000/BAD", tmp_path)
@@ -270,8 +270,8 @@ def test_convert_all_nonzero_exit_still_collects_outputs(tmp_path):
         _make_md(converter, ok_pub)
         return MagicMock(returncode=1, stderr="one task failed")
 
-    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
+    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
          patch.object(converter, "_cache_result") as mock_cache:
         converter.transform_all()
 
@@ -281,7 +281,7 @@ def test_convert_all_nonzero_exit_still_collects_outputs(tmp_path):
 
 
 def test_convert_all_passes_vram_override_when_set(tmp_path):
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pub = _make_pub("10.1000/V", tmp_path)
     converter = MinerUPdfTransformer(publication_list=[pub])
@@ -293,9 +293,9 @@ def test_convert_all_passes_vram_override_when_set(tmp_path):
         captured["env"] = kwargs["env"]
         return MagicMock(returncode=0)
 
-    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("text_transformation.converters.mineru_pdf_to_md.MINERU_VIRTUAL_VRAM_SIZE", "16"), \
-         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
+    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.MINERU_VIRTUAL_VRAM_SIZE", "16"), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
          patch.object(converter, "_cache_result"):
         converter.transform_all()
 
@@ -304,7 +304,7 @@ def test_convert_all_passes_vram_override_when_set(tmp_path):
 
 def test_convert_all_strips_blank_vram_override(tmp_path, monkeypatch):
     """A blank value in secrets.env must not reach the MinerU subprocess."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     monkeypatch.setenv("MINERU_VIRTUAL_VRAM_SIZE", "")
     pub = _make_pub("10.1000/W", tmp_path)
@@ -317,9 +317,9 @@ def test_convert_all_strips_blank_vram_override(tmp_path, monkeypatch):
         captured["env"] = kwargs["env"]
         return MagicMock(returncode=0)
 
-    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("text_transformation.converters.mineru_pdf_to_md.MINERU_VIRTUAL_VRAM_SIZE", ""), \
-         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
+    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.MINERU_VIRTUAL_VRAM_SIZE", ""), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
          patch.object(converter, "_cache_result"):
         converter.transform_all()
 
@@ -328,13 +328,13 @@ def test_convert_all_strips_blank_vram_override(tmp_path, monkeypatch):
 
 def test_convert_all_uses_base_class(tmp_path):
     """transform_all() uses the base class iteration (calls transform2json per pub)."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pubs = [_make_pub("10.1000/X", tmp_path)]
     converter = MinerUPdfTransformer(publication_list=pubs)
 
-    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", return_value=MagicMock(returncode=0)), \
+    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", return_value=MagicMock(returncode=0)), \
          patch.object(converter, "transform2json", return_value=None) as mock_transform, \
          patch.object(converter, "_cache_result"):
         converter.transform_all()
@@ -344,13 +344,13 @@ def test_convert_all_uses_base_class(tmp_path):
 
 def test_convert_all_checks_mineru_once(tmp_path):
     """transform_all() calls check_mineru exactly once regardless of publication count."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(3)]
     converter = MinerUPdfTransformer(publication_list=pubs)
 
-    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU) as mock_check, \
-         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", return_value=MagicMock(returncode=0)), \
+    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU) as mock_check, \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", return_value=MagicMock(returncode=0)), \
          patch.object(converter, "transform2json", return_value=None), \
          patch.object(converter, "_cache_result"):
         converter.transform_all()
@@ -359,7 +359,7 @@ def test_convert_all_checks_mineru_once(tmp_path):
 
 def test_batching_splits_into_correct_number_of_calls(tmp_path):
     """7 pubs with batch_size=3 → 3 MinerU calls (chunks of 3, 3, 1)."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(7)]
     converter = MinerUPdfTransformer(publication_list=pubs, batch_size=3)
@@ -374,8 +374,8 @@ def test_batching_splits_into_correct_number_of_calls(tmp_path):
             _make_md(converter, pub)
         return MagicMock(returncode=0)
 
-    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run) as mock_run, \
+    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run) as mock_run, \
          patch.object(converter, "_cache_result"):
         converter.transform_all()
 
@@ -387,7 +387,7 @@ def test_batching_splits_into_correct_number_of_calls(tmp_path):
 
 def test_batching_covers_all_pubs(tmp_path):
     """Every publication ends up staged across the chunks with no duplicates or omissions."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(5)]
     converter = MinerUPdfTransformer(publication_list=pubs, batch_size=2)
@@ -402,8 +402,8 @@ def test_batching_covers_all_pubs(tmp_path):
             _make_md(converter, pub)
         return MagicMock(returncode=0)
 
-    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
+    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
          patch.object(converter, "_cache_result"):
         converter.transform_all()
 
@@ -413,7 +413,7 @@ def test_batching_covers_all_pubs(tmp_path):
 
 def test_batching_is_sequential_not_parallel(tmp_path):
     """Chunks run one at a time — the second call only starts after the first returns."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(4)]
     converter = MinerUPdfTransformer(publication_list=pubs, batch_size=2)
@@ -428,8 +428,8 @@ def test_batching_is_sequential_not_parallel(tmp_path):
             _make_md(converter, pub)
         return MagicMock(returncode=0)
 
-    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
+    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
          patch.object(converter, "_cache_result"):
         converter.transform_all()
 
@@ -440,7 +440,7 @@ def test_batching_is_sequential_not_parallel(tmp_path):
 
 def test_none_batch_size_sends_all_in_one_call(tmp_path):
     """batch_size=None bypasses chunking and sends all pending PDFs in one MinerU call."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(5)]
     converter = MinerUPdfTransformer(publication_list=pubs, batch_size=None)
@@ -451,8 +451,8 @@ def test_none_batch_size_sends_all_in_one_call(tmp_path):
             _make_md(converter, pub)
         return MagicMock(returncode=0)
 
-    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run) as mock_run, \
+    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run) as mock_run, \
          patch.object(converter, "_cache_result"):
         converter.transform_all()
 
@@ -461,7 +461,7 @@ def test_none_batch_size_sends_all_in_one_call(tmp_path):
 
 def test_batch_size_equal_to_pub_count_sends_one_call(tmp_path):
     """When batch_size == len(pubs) the behaviour is identical to a single unbatched call."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(3)]
     converter = MinerUPdfTransformer(publication_list=pubs, batch_size=3)
@@ -472,8 +472,8 @@ def test_batch_size_equal_to_pub_count_sends_one_call(tmp_path):
             _make_md(converter, pub)
         return MagicMock(returncode=0)
 
-    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run) as mock_run, \
+    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run) as mock_run, \
          patch.object(converter, "_cache_result"):
         converter.transform_all()
 
@@ -482,7 +482,7 @@ def test_batch_size_equal_to_pub_count_sends_one_call(tmp_path):
 
 def test_batch_size_larger_than_pub_count_sends_one_call(tmp_path):
     """batch_size larger than the list still results in a single MinerU call."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(2)]
     converter = MinerUPdfTransformer(publication_list=pubs, batch_size=100)
@@ -493,8 +493,8 @@ def test_batch_size_larger_than_pub_count_sends_one_call(tmp_path):
             _make_md(converter, pub)
         return MagicMock(returncode=0)
 
-    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run) as mock_run, \
+    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run) as mock_run, \
          patch.object(converter, "_cache_result"):
         converter.transform_all()
 
@@ -503,7 +503,7 @@ def test_batch_size_larger_than_pub_count_sends_one_call(tmp_path):
 
 def test_already_converted_pubs_excluded_from_batching(tmp_path):
     """Pubs with existing output on disk are not re-staged in any chunk."""
-    from text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     done_pub = _make_pub("10.1000/DONE", tmp_path)
     new_pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(4)]
@@ -520,8 +520,8 @@ def test_already_converted_pubs_excluded_from_batching(tmp_path):
             _make_md(converter, pub)
         return MagicMock(returncode=0)
 
-    with patch("text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
+    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
          patch.object(converter, "_cache_result"):
         converter.transform_all()
 

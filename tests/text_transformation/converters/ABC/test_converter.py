@@ -1,10 +1,10 @@
-import sqlite3
+﻿import sqlite3
 import pytest
 import os
 from pathlib import Path
-from config import TMP_DIR
-from text_download.basemodels.publication import Publication
-from text_download.database.database import create_database, get_row_for_doi
+from biomarkit.config import TMP_DIR
+from biomarkit.text_download.basemodels.publication import Publication
+from biomarkit.text_download.database.database import create_database, get_row_for_doi
 
 TMP_DB = TMP_DIR / "tests_tmp" / "test_converter.sqlite"
 
@@ -51,7 +51,7 @@ def _make_converter_class(convert_fn):
     Returns a concrete Transformer subclass whose transform2json() delegates to convert_fn.
     Allows different transform2json() behaviours per test without boilerplate.
     """
-    from text_transformation.converters.ABC.transformer import Transformer
+    from biomarkit.text_transformation.converters.ABC.transformer import Transformer
 
     class _TestConverter(Transformer):
         def transform2json(self, pub):
@@ -80,7 +80,7 @@ def test_build_output_path_places_json_in_auto_subdir(tmp_path):
 
 def test_default_output_dir_is_raw_markdown_dir():
     """Default output_dir is RAW_MARKDOWN_DIR."""
-    from config import JSON_STRUCT_DIR
+    from biomarkit.config import JSON_STRUCT_DIR
     cls = _make_converter_class(lambda p: None)
     converter = cls(publication_list=[])
     assert converter.output_dir == JSON_STRUCT_DIR
@@ -105,7 +105,7 @@ def test_cache_result_writes_content_json_filepath_to_db(tmp_path):
 
     pub.content_json_filepath = raw_md
 
-    from text_transformation.converters.ABC.transformer import Transformer
+    from biomarkit.text_transformation.converters.ABC.transformer import Transformer
     cls = _make_converter_class(lambda p: None)
     converter = cls(publication_list=[pub])
     converter.cache = TMP_DB

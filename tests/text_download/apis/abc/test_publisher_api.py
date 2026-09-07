@@ -1,9 +1,9 @@
-import pytest
+﻿import pytest
 import requests.exceptions
 from pathlib import Path
 from unittest.mock import patch, MagicMock, mock_open
-from config import DB_CACHE_FILE_NAME
-from text_download.apis.abc.publisher_api import PublisherApi
+from biomarkit.config import DB_CACHE_FILE_NAME
+from biomarkit.text_download.apis.abc.publisher_api import PublisherApi
 from tests.text_download.controller.test_controller import publications
 
 # Mock the class.
@@ -16,10 +16,10 @@ class PublicationApiDummy(PublisherApi):
     def download_all_papers(self) -> None:
         pass
 
-@patch("text_download.apis.abc.publisher_api.API_URL_TO_NAME", {"unpaywall": "https://api.unpaywall.org"})
-@patch("text_download.apis.abc.publisher_api.API_KEY_TO_NAME", {"unpaywall": "fake-key"})
-@patch("text_download.apis.abc.publisher_api.USER_EMAIL", "test@example.com")
-@patch("text_download.apis.abc.publisher_api.DOWNLOAD_DIR", "/tmp/downloads")
+@patch("biomarkit.text_download.apis.abc.publisher_api.API_URL_TO_NAME", {"unpaywall": "https://api.unpaywall.org"})
+@patch("biomarkit.text_download.apis.abc.publisher_api.API_KEY_TO_NAME", {"unpaywall": "fake-key"})
+@patch("biomarkit.text_download.apis.abc.publisher_api.USER_EMAIL", "test@example.com")
+@patch("biomarkit.text_download.apis.abc.publisher_api.DOWNLOAD_DIR", "/tmp/downloads")
 def test___init__sets_attributes(publications):
 
     # Patch the _test_url check so __init__ passes.
@@ -44,7 +44,7 @@ def test__test_url_success():
     mock_response = MagicMock()
     mock_response.raise_for_status.return_value = True
 
-    with patch("text_download.apis.abc.publisher_api.requests.get", return_value=mock_response) as mock_get:
+    with patch("biomarkit.text_download.apis.abc.publisher_api.requests.get", return_value=mock_response) as mock_get:
         result = api._test_url()
 
     mock_get.assert_called_once_with(api.api_url)
@@ -52,25 +52,25 @@ def test__test_url_success():
 
 def test__test_url_failure(publications):
     api = PublicationApiDummy(name="unpaywall", publication_list=publications)
-    with patch("text_download.apis.abc.publisher_api.requests.get")as mock_get:
+    with patch("biomarkit.text_download.apis.abc.publisher_api.requests.get")as mock_get:
         mock_get.side_effect = requests.exceptions.RequestException("Network error")
         result = api._test_url()
         assert result is False
 
-@patch("text_download.apis.abc.publisher_api.DOWNLOAD_DIR", Path("/tmp/downloads"))
+@patch("biomarkit.text_download.apis.abc.publisher_api.DOWNLOAD_DIR", Path("/tmp/downloads"))
 def test__build_download_filepath():
     api = PublicationApiDummy(name="unpaywall", publication_list=[])
-    with patch("text_download.apis.abc.publisher_api.random.choices", return_value=list("1234567890")):
+    with patch("biomarkit.text_download.apis.abc.publisher_api.random.choices", return_value=list("1234567890")):
         path = api._build_download_filepath(filetype="pdf")
 
     assert isinstance(path, Path)
     assert path.parent == Path("/tmp/downloads")
     assert path.name == "unpaywall_1234567890.pdf"
 
-@patch("text_download.apis.abc.publisher_api.DOWNLOAD_DIR", Path("/tmp/downloads"))
+@patch("biomarkit.text_download.apis.abc.publisher_api.DOWNLOAD_DIR", Path("/tmp/downloads"))
 def test__build_download_filepath_source_override():
     api = PublicationApiDummy(name="unpaywall", publication_list=[])
-    with patch("text_download.apis.abc.publisher_api.random.choices", return_value=list("1234567890")):
+    with patch("biomarkit.text_download.apis.abc.publisher_api.random.choices", return_value=list("1234567890")):
         path = api._build_download_filepath(filetype="pdf", source="arxiv")
 
     assert path.name == "arxiv_1234567890.pdf"
@@ -119,7 +119,7 @@ def test__download_paper_from_url_success():
     mock_response.content = b"PDF-DATA"
     mock_response.raise_for_status.return_value = None
 
-    with patch("text_download.apis.abc.publisher_api.requests.get", return_value=mock_response) as mock_get, \
+    with patch("biomarkit.text_download.apis.abc.publisher_api.requests.get", return_value=mock_response) as mock_get, \
          patch("builtins.open", mock_open()) as mock_file:
 
         api._download_paper_from_url(url, filepath)
@@ -137,7 +137,7 @@ def test_download_paper_from_url_http_error():
     mock_response = MagicMock()
     mock_response.raise_for_status.side_effect = Exception("404 Not Found")
 
-    with patch("text_download.apis.abc.publisher_api.requests.get", return_value=mock_response):
+    with patch("biomarkit.text_download.apis.abc.publisher_api.requests.get", return_value=mock_response):
         with pytest.raises(Exception, match="404 Not Found"):
             api._download_paper_from_url(url, filepath)
 
@@ -149,7 +149,7 @@ def test__download_pdf_if_valid_success():
     mock_response.raise_for_status.return_value = None
     mock_response.content = b"%PDF-1.7 pdf-bytes"
 
-    with patch("text_download.apis.abc.publisher_api.requests.get", return_value=mock_response), \
+    with patch("biomarkit.text_download.apis.abc.publisher_api.requests.get", return_value=mock_response), \
          patch("builtins.open", mock_open()) as mock_file:
 
         result = api._download_pdf_if_valid(url="https://example.com/paper.pdf", filepath=filepath)
@@ -166,7 +166,7 @@ def test__download_pdf_if_valid_rejects_non_pdf():
     mock_response.raise_for_status.return_value = None
     mock_response.content = b"<html>PDF unavailable</html>"
 
-    with patch("text_download.apis.abc.publisher_api.requests.get", return_value=mock_response), \
+    with patch("biomarkit.text_download.apis.abc.publisher_api.requests.get", return_value=mock_response), \
          patch("builtins.open", mock_open()) as mock_file:
 
         result = api._download_pdf_if_valid(url="https://example.com/paper.pdf", filepath=Path("/tmp/paper.pdf"))
@@ -177,7 +177,7 @@ def test__download_pdf_if_valid_rejects_non_pdf():
 def test__download_pdf_if_valid_request_exception():
     api = PublicationApiDummy(name="unpaywall", publication_list=[])
 
-    with patch("text_download.apis.abc.publisher_api.requests.get",
+    with patch("biomarkit.text_download.apis.abc.publisher_api.requests.get",
                side_effect=requests.exceptions.RequestException("Network error")):
         result = api._download_pdf_if_valid(url="https://example.com/paper.pdf", filepath=Path("/tmp/paper.pdf"))
 
@@ -191,7 +191,7 @@ def test__cache_successful_download(publications):
     pub.publication_filepath=Path("paper.pdf")
 
     # Success.
-    with patch("text_download.apis.abc.publisher_api.insert_row", return_value=None) as mock_insert:
+    with patch("biomarkit.text_download.apis.abc.publisher_api.insert_row", return_value=None) as mock_insert:
         api._cache_successful_download(pub)
 
         mock_insert.assert_called_once_with(

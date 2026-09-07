@@ -1,8 +1,8 @@
-import pytest
+﻿import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 import plotly.graph_objects as go
-from text_download.basemodels.publication import Publication
+from biomarkit.text_download.basemodels.publication import Publication
 
 
 def _make_pub(doi: str, tmp_path: Path, doc_type: str = "PDF",
@@ -23,7 +23,7 @@ def _make_pub(doi: str, tmp_path: Path, doc_type: str = "PDF",
 
 
 def test_make_conversion_df_newly_converted_success(tmp_path):
-    from text_transformation.visualisation.conversion_report import _make_conversion_df
+    from biomarkit.text_transformation.visualisation.conversion_report import _make_conversion_df
     md = tmp_path / "out.md"
     pub = _make_pub("10.1000/A", tmp_path, raw_md=md)
     df = _make_conversion_df(newly_converted=[pub], pre_cached=[])
@@ -33,14 +33,14 @@ def test_make_conversion_df_newly_converted_success(tmp_path):
 
 
 def test_make_conversion_df_newly_converted_failed(tmp_path):
-    from text_transformation.visualisation.conversion_report import _make_conversion_df
+    from biomarkit.text_transformation.visualisation.conversion_report import _make_conversion_df
     pub = _make_pub("10.1000/B", tmp_path)
     df = _make_conversion_df(newly_converted=[pub], pre_cached=[])
     assert df.iloc[0]["status"] == "Failed"
 
 
 def test_make_conversion_df_pre_cached(tmp_path):
-    from text_transformation.visualisation.conversion_report import _make_conversion_df
+    from biomarkit.text_transformation.visualisation.conversion_report import _make_conversion_df
     md = tmp_path / "cached.md"
     pub = _make_pub("10.1000/C", tmp_path, raw_md=md)
     df = _make_conversion_df(newly_converted=[], pre_cached=[pub])
@@ -49,7 +49,7 @@ def test_make_conversion_df_pre_cached(tmp_path):
 
 
 def test_make_conversion_df_columns(tmp_path):
-    from text_transformation.visualisation.conversion_report import _make_conversion_df
+    from biomarkit.text_transformation.visualisation.conversion_report import _make_conversion_df
     pub = _make_pub("10.1000/D", tmp_path)
     df = _make_conversion_df(newly_converted=[pub], pre_cached=[])
     expected_cols = {"doi", "publisher", "year", "document_type", "status",
@@ -58,7 +58,7 @@ def test_make_conversion_df_columns(tmp_path):
 
 
 def test_make_conversion_df_md_size_kb_populated_for_success(tmp_path):
-    from text_transformation.visualisation.conversion_report import _make_conversion_df
+    from biomarkit.text_transformation.visualisation.conversion_report import _make_conversion_df
     md = tmp_path / "out.md"
     md.write_text("hello world")
     pub = _make_pub("10.1000/E", tmp_path, raw_md=md)
@@ -67,14 +67,14 @@ def test_make_conversion_df_md_size_kb_populated_for_success(tmp_path):
 
 
 def test_make_conversion_df_md_size_kb_zero_for_failure(tmp_path):
-    from text_transformation.visualisation.conversion_report import _make_conversion_df
+    from biomarkit.text_transformation.visualisation.conversion_report import _make_conversion_df
     pub = _make_pub("10.1000/F", tmp_path)
     df = _make_conversion_df(newly_converted=[pub], pre_cached=[])
     assert df.iloc[0]["md_size_kb"] == 0.0
 
 
 def test_make_conversion_df_empty_inputs():
-    from text_transformation.visualisation.conversion_report import _make_conversion_df
+    from biomarkit.text_transformation.visualisation.conversion_report import _make_conversion_df
     df = _make_conversion_df(newly_converted=[], pre_cached=[])
     assert len(df) == 0
 
@@ -85,7 +85,7 @@ def test_make_conversion_df_empty_inputs():
 
 def _make_df(tmp_path):
     """Returns a small mixed DataFrame for plot testing."""
-    from text_transformation.visualisation.conversion_report import _make_conversion_df
+    from biomarkit.text_transformation.visualisation.conversion_report import _make_conversion_df
 
     md1 = tmp_path / "a.md"
     md1.write_text("x" * 1000)
@@ -104,7 +104,7 @@ def _make_df(tmp_path):
 
 
 def test_plt_overall_status_returns_figure(tmp_path):
-    from text_transformation.visualisation.conversion_report import _plt_overall_status
+    from biomarkit.text_transformation.visualisation.conversion_report import _plt_overall_status
     df = _make_df(tmp_path)
     fig = _plt_overall_status(df)
     assert isinstance(fig, go.Figure)
@@ -113,7 +113,7 @@ def test_plt_overall_status_returns_figure(tmp_path):
 
 
 def test_plt_status_by_publisher_returns_figure(tmp_path):
-    from text_transformation.visualisation.conversion_report import _plt_status_by_publisher
+    from biomarkit.text_transformation.visualisation.conversion_report import _plt_status_by_publisher
     df = _make_df(tmp_path)
     fig = _plt_status_by_publisher(df)
     assert isinstance(fig, go.Figure)
@@ -122,7 +122,7 @@ def test_plt_status_by_publisher_returns_figure(tmp_path):
 
 
 def test_plt_status_by_year_returns_figure(tmp_path):
-    from text_transformation.visualisation.conversion_report import _plt_status_by_year
+    from biomarkit.text_transformation.visualisation.conversion_report import _plt_status_by_year
     df = _make_df(tmp_path)
     fig = _plt_status_by_year(df)
     assert isinstance(fig, go.Figure)
@@ -131,7 +131,7 @@ def test_plt_status_by_year_returns_figure(tmp_path):
 
 
 def test_plt_md_size_distribution_returns_figure(tmp_path):
-    from text_transformation.visualisation.conversion_report import _plt_md_size_distribution
+    from biomarkit.text_transformation.visualisation.conversion_report import _plt_md_size_distribution
     df = _make_df(tmp_path)
     fig = _plt_md_size_distribution(df)
     assert isinstance(fig, go.Figure)
@@ -140,8 +140,8 @@ def test_plt_md_size_distribution_returns_figure(tmp_path):
 
 
 def test_plt_md_size_distribution_blank_when_no_successes(tmp_path):
-    from text_transformation.visualisation.conversion_report import _plt_md_size_distribution
-    from text_transformation.visualisation.conversion_report import _make_conversion_df
+    from biomarkit.text_transformation.visualisation.conversion_report import _plt_md_size_distribution
+    from biomarkit.text_transformation.visualisation.conversion_report import _make_conversion_df
     pub = _make_pub("10.1000/X", tmp_path)  # no raw_md → Failed
     df = _make_conversion_df(newly_converted=[pub], pre_cached=[])
     fig = _plt_md_size_distribution(df)
@@ -150,7 +150,7 @@ def test_plt_md_size_distribution_blank_when_no_successes(tmp_path):
 
 
 def test_plt_failures_by_publisher_returns_figure(tmp_path):
-    from text_transformation.visualisation.conversion_report import _plt_failures_by_publisher
+    from biomarkit.text_transformation.visualisation.conversion_report import _plt_failures_by_publisher
     df = _make_df(tmp_path)
     fig = _plt_failures_by_publisher(df)
     assert isinstance(fig, go.Figure)
@@ -160,8 +160,8 @@ def test_plt_failures_by_publisher_returns_figure(tmp_path):
 
 
 def test_plt_failures_by_publisher_blank_when_no_failures(tmp_path):
-    from text_transformation.visualisation.conversion_report import _plt_failures_by_publisher
-    from text_transformation.visualisation.conversion_report import _make_conversion_df
+    from biomarkit.text_transformation.visualisation.conversion_report import _plt_failures_by_publisher
+    from biomarkit.text_transformation.visualisation.conversion_report import _make_conversion_df
     md = tmp_path / "out.md"
     md.write_text("x")
     pub = _make_pub("10.1000/Y", tmp_path, raw_md=md)
@@ -172,7 +172,7 @@ def test_plt_failures_by_publisher_blank_when_no_failures(tmp_path):
 
 
 def test_plt_run_breakdown_returns_figure(tmp_path):
-    from text_transformation.visualisation.conversion_report import _plt_run_breakdown
+    from biomarkit.text_transformation.visualisation.conversion_report import _plt_run_breakdown
     df = _make_df(tmp_path)
     fig = _plt_run_breakdown(df)
     assert isinstance(fig, go.Figure)
@@ -185,7 +185,7 @@ def test_plt_run_breakdown_returns_figure(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_build_conversion_report_creates_html_file(tmp_path):
-    from text_transformation.visualisation.conversion_report import build_conversion_report
+    from biomarkit.text_transformation.visualisation.conversion_report import build_conversion_report
 
     md1 = tmp_path / "a.md"
     md1.write_text("hello")
@@ -193,7 +193,7 @@ def test_build_conversion_report_creates_html_file(tmp_path):
     pub_failed = _make_pub("10.1000/L", tmp_path)
 
     out_file = tmp_path / "report.html"
-    with patch("text_transformation.visualisation.conversion_report.REPORT_DIR", tmp_path):
+    with patch("biomarkit.text_transformation.visualisation.conversion_report.REPORT_DIR", tmp_path):
         build_conversion_report(
             newly_converted=[pub_converted, pub_failed],
             pre_cached=[],
@@ -206,9 +206,9 @@ def test_build_conversion_report_creates_html_file(tmp_path):
 
 
 def test_build_conversion_report_default_filename(tmp_path):
-    from text_transformation.visualisation.conversion_report import build_conversion_report
+    from biomarkit.text_transformation.visualisation.conversion_report import build_conversion_report
 
-    with patch("text_transformation.visualisation.conversion_report.REPORT_DIR", tmp_path):
+    with patch("biomarkit.text_transformation.visualisation.conversion_report.REPORT_DIR", tmp_path):
         build_conversion_report(newly_converted=[], pre_cached=[])
 
     html_files = list(tmp_path.glob("conversion_report_*.html"))

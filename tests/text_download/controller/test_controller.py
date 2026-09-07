@@ -1,8 +1,8 @@
-import pytest
-from config import TMP_DIR
-from text_download.controller.controller import Controller
-from text_download.basemodels.publication import Publication
-from text_download.database.database import insert_row
+﻿import pytest
+from biomarkit.config import TMP_DIR
+from biomarkit.text_download.controller.controller import Controller
+from biomarkit.text_download.basemodels.publication import Publication
+from biomarkit.text_download.database.database import insert_row
 
 # Fixtures.
 @pytest.fixture

@@ -1,7 +1,7 @@
-import pytest
+﻿import pytest
 from pydantic_core import ValidationError
-from text_download.basemodels.publication import Publication, DocumentType
-from config import TMP_DIR
+from biomarkit.text_download.basemodels.publication import Publication, DocumentType
+from biomarkit.config import TMP_DIR
 
 def test_publication_success_no_file():
     # Create a new publication without a cached file.

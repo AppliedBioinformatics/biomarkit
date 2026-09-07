@@ -1,7 +1,7 @@
-import pytest
+﻿import pytest
 from unittest.mock import patch
 from pathlib import Path
-from text_download.apis.clients.springer import SpringerClient
+from biomarkit.text_download.apis.clients.springer import SpringerClient
 from tests.text_download.controller.test_controller import publications
 
 def test_springer_client_init(publications):

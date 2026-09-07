@@ -1,6 +1,6 @@
-import pytest
+﻿import pytest
 import logging
-from config import LOG_DIR
+from biomarkit.config import LOG_DIR
 
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_logs_on_test_finish():

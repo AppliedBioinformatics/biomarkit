@@ -1,6 +1,6 @@
-import pytest
+﻿import pytest
 from pathlib import Path
-from standardisation.content_list.schema import (
+from biomarkit.standardisation.content_list.schema import (
     ChartBlock, ChartContent,
     ImageBlock, ImageContent, ImageSource,
     InlineEquation,
@@ -10,7 +10,7 @@ from standardisation.content_list.schema import (
     TableBlock, TableContent,
     TextSpan, TitleBlock, TitleContent,
 )
-from standardisation.content_list.renderer import render
+from biomarkit.standardisation.content_list.renderer import render
 
 _BBOX = (0, 0, 0, 0)
 

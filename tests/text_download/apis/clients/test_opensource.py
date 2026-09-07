@@ -1,5 +1,5 @@
-from tests.text_download.apis.abc.test_publisher_api import publications
-from text_download.apis.clients.opensource import OpenSourceClient
+﻿from tests.text_download.apis.abc.test_publisher_api import publications
+from biomarkit.text_download.apis.clients.opensource import OpenSourceClient
 from unittest.mock import MagicMock, patch, call
 from requests.exceptions import RequestException
 from pathlib import Path
@@ -10,7 +10,7 @@ def test__get_pdf_url_prefers_url_for_pdf(publications):
     doi = "10.1234/testdoi"
     expected_url = "http://example.com/paper.pdf"
 
-    with patch("text_download.apis.clients.opensource.requests.get") as mock_get:
+    with patch("biomarkit.text_download.apis.clients.opensource.requests.get") as mock_get:
         mock_response = MagicMock()
         mock_response.raise_for_status.return_value = None
         mock_response.json.return_value = {"best_oa_location": {"url_for_pdf": expected_url, "url": "http://example.com/landing"}}
@@ -22,7 +22,7 @@ def test__get_pdf_url_falls_back_to_url(publications):
     doi = "10.1234/testdoi"
     landing_url = "http://example.com/landing"
 
-    with patch("text_download.apis.clients.opensource.requests.get") as mock_get:
+    with patch("biomarkit.text_download.apis.clients.opensource.requests.get") as mock_get:
         mock_response = MagicMock()
         mock_response.raise_for_status.return_value = None
         mock_response.json.return_value = {"best_oa_location": {"url_for_pdf": None, "url": landing_url}}
@@ -33,7 +33,7 @@ def test__get_pdf_url_no_oa_location(publications):
     api = OpenSourceClient(publications)
     doi = "10.1234/testdoi"
 
-    with patch("text_download.apis.clients.opensource.requests.get") as mock_get:
+    with patch("biomarkit.text_download.apis.clients.opensource.requests.get") as mock_get:
         mock_response = MagicMock()
         mock_response.raise_for_status.return_value = None
         mock_response.json.return_value = {}
@@ -45,7 +45,7 @@ def test__get_pdf_url_request_exception(publications, caplog):
     doi = "10.1234/testdoi"
 
     # Other network errors.
-    with patch("text_download.apis.clients.opensource.requests.get") as mock_get:
+    with patch("biomarkit.text_download.apis.clients.opensource.requests.get") as mock_get:
         mock_get.side_effect = RequestException("Network error")
 
         with caplog.at_level("INFO", logger=api.logger.name):
@@ -210,7 +210,7 @@ def test__get_chemrxiv_item_unwraps_payload(publications):
     api = OpenSourceClient(publications)
     doi = "10.26434/chemrxiv-2021-np90x"
 
-    with patch("text_download.apis.clients.opensource.requests.get") as mock_get:
+    with patch("biomarkit.text_download.apis.clients.opensource.requests.get") as mock_get:
         mock_response = MagicMock()
         mock_response.raise_for_status.return_value = None
 
@@ -226,7 +226,7 @@ def test__get_chemrxiv_item_unwraps_payload(publications):
 def test__get_chemrxiv_item_request_exception(publications):
     api = OpenSourceClient(publications)
 
-    with patch("text_download.apis.clients.opensource.requests.get") as mock_get:
+    with patch("biomarkit.text_download.apis.clients.opensource.requests.get") as mock_get:
         mock_get.side_effect = RequestException("404 Not Found")
         assert api._get_chemrxiv_item("10.26434/chemrxiv-2021-np90x") is None
 

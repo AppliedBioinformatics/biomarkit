@@ -1,10 +1,10 @@
-import pytest
+﻿import pytest
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 from requests.exceptions import RequestException
-from text_download.apis.clients.frontiers import FrontiersClient
-from text_download.apis.abc.playwright_publisher_api import PlaywrightPublisherApi
-from text_download.basemodels.publication import Publication
+from biomarkit.text_download.apis.clients.frontiers import FrontiersClient
+from biomarkit.text_download.apis.abc.playwright_publisher_api import PlaywrightPublisherApi
+from biomarkit.text_download.basemodels.publication import Publication
 
 
 @pytest.fixture
@@ -65,14 +65,14 @@ class TestFrontiersClient:
         mock_resp = MagicMock()
         mock_resp.iter_content.return_value = [b"PDF-DATA"]
 
-        with patch("text_download.apis.clients.frontiers.requests.get", return_value=mock_resp), \
+        with patch("biomarkit.text_download.apis.clients.frontiers.requests.get", return_value=mock_resp), \
              patch("builtins.open", MagicMock()):
             result = client.attempt_fallback("10.1234/test", "/tmp/p.pdf")
         assert result is True
 
     def test_attempt_fallback_request_error(self, publications):
         client = FrontiersClient(publications)
-        with patch("text_download.apis.clients.frontiers.requests.get",
+        with patch("biomarkit.text_download.apis.clients.frontiers.requests.get",
                    side_effect=RequestException("fail")):
             result = client.attempt_fallback("10.1234/test", "/tmp/p.pdf")
         assert result is False

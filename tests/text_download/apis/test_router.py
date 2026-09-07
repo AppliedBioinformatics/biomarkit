@@ -1,8 +1,8 @@
-from unittest.mock import MagicMock, patch
-from text_download.apis.map import api_clients
-from text_download.apis.clients.opensource import OpenSourceClient
-from text_download.apis.router import ApiRouter
-from text_download.basemodels.publication import Publication
+﻿from unittest.mock import MagicMock, patch
+from biomarkit.text_download.apis.map import api_clients
+from biomarkit.text_download.apis.clients.opensource import OpenSourceClient
+from biomarkit.text_download.apis.router import ApiRouter
+from biomarkit.text_download.basemodels.publication import Publication
 import pytest
 
 
@@ -159,7 +159,7 @@ def test__download_in_parallel_success(publication_list, caplog):
     client_list = [pub1, pub2]
 
     # Patch run_publisher
-    with patch("text_download.apis.router.ApiRouter._run_publisher") as mock_run:
+    with patch("biomarkit.text_download.apis.router.ApiRouter._run_publisher") as mock_run:
         mock_run.side_effect = [
             pub1.publication_list,
             pub2.publication_list,
@@ -193,7 +193,7 @@ def test__download_in_parallel_api_error(mock_publisher_failure, mock_publisher_
 
     client_list = [working_client, failing_client]
 
-    with patch("text_download.apis.router.ApiRouter._run_publisher", side_effect=fake_run) as mock_run:
+    with patch("biomarkit.text_download.apis.router.ApiRouter._run_publisher", side_effect=fake_run) as mock_run:
         results = ApiRouter._download_in_parallel(client_list, max_threads=4)
 
         assert set(results.keys()) == {"TestSuccessClient", "TestFailureClient"}
@@ -207,7 +207,7 @@ def test_throw_at_opensource_success(publication_list):
     # Spawn a router.
     router = ApiRouter(publication_list)
 
-    with patch('text_download.apis.router.OpenSourceClient') as MockOpenSourceClient:
+    with patch('biomarkit.text_download.apis.router.OpenSourceClient') as MockOpenSourceClient:
         mock_client = MockOpenSourceClient.return_value
         successful_pubs = publication_list[:2]
 
@@ -230,7 +230,7 @@ def test_throw_at_opensource_success(publication_list):
 def test_throw_at_opensource_empty_pub_list():
     router = ApiRouter([])
 
-    with patch('text_download.apis.router.OpenSourceClient') as MockOpenSourceClient:
+    with patch('biomarkit.text_download.apis.router.OpenSourceClient') as MockOpenSourceClient:
         client = MockOpenSourceClient.return_value
         client.publication_list = []
         client.download_all_papers = MagicMock()
@@ -245,7 +245,7 @@ def test_throw_at_opensource_when_flag_false(publication_list):
     router = ApiRouter(publication_list)
     router.try_opensource = False
 
-    with patch("text_download.apis.router.OpenSourceClient") as MockOS:
+    with patch("biomarkit.text_download.apis.router.OpenSourceClient") as MockOS:
         router.throw_at_opensource()
 
     MockOS.assert_not_called()
