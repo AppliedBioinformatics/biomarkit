@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 from biomarkit.config import DB_CACHE_FILE_NAME, JSON_STRUCT_DIR
 from biomarkit.text_download.basemodels.publication import Publication
-from biomarkit.text_download.database.database import update_content_json_filepath
+from biomarkit.text_download.database.database import update_content_json_filepath, _to_relative
 from biomarkit.text_download.utils.generics import progress_split_bar
 
 
@@ -74,7 +74,7 @@ class Transformer(ABC):
         """
         update_content_json_filepath(
             doi=pub.doi,
-            content_json_filepath=str(pub.content_json_filepath),
+            content_json_filepath=_to_relative(str(pub.content_json_filepath), self.cache),
             db_path=self.cache,
         )
         logging.debug(f"Cache updated with content_json_filepath for {pub.doi}.")

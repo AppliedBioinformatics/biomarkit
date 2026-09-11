@@ -12,6 +12,20 @@ DB_SCHEMA = """
     final_md_filepath TEXT)
     """
 
+def _to_relative(path: str, db_path: Union[str, Path]) -> str:
+    p = Path(path)
+    if not p.is_absolute():
+        return path
+    return str(p.relative_to(Path(db_path).parent))
+
+
+def _to_absolute(path: str, db_path: Union[str, Path]) -> str:
+    p = Path(path)
+    if p.is_absolute():
+        return path
+    return str(Path(db_path).parent / p)
+
+
 def create_database(db_path: Path, del_existing: bool = False) -> None:
     """
     Creates a database.

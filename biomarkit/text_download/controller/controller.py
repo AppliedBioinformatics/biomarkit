@@ -4,7 +4,7 @@ import biomarkit.config
 from typing import List, Dict
 from collections import defaultdict
 from biomarkit.text_download.basemodels.publication import Publication
-from biomarkit.text_download.database.database import create_database, get_row_for_doi
+from biomarkit.text_download.database.database import create_database, get_row_for_doi, _to_absolute
 
 class Controller:
     """
@@ -92,7 +92,7 @@ class Controller:
             # 1 - Check to see if the DOI is in the database. Only add the filepath if it actually exists.
             cached_row = get_row_for_doi(pub.doi, db_path=self.cache)
             if cached_row:
-                pub.publication_filepath = cached_row["publication_filepath"]
+                pub.publication_filepath = _to_absolute(cached_row["publication_filepath"], self.cache)
 
         logging.debug("Controller finished checking cache for existing publication filepaths.")
 

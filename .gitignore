@@ -18,3 +18,6 @@ text_download/apis/clients/am_phyto_soc.py
 text_download/apis/clients/copernicus.py
 evals/
 download_results.xlsx
+biomarkit_manuscript.docx
+cover_letter_bioinformatics.docx
+ST1.csv

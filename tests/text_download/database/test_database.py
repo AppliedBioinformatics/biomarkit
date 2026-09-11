@@ -1,6 +1,7 @@
 ﻿import sqlite3
+from pathlib import Path
 from biomarkit.config import TMP_DIR
-from biomarkit.text_download.database.database import create_database, insert_row, get_row_for_doi, update_content_json_filepath, update_final_md_filepath
+from biomarkit.text_download.database.database import create_database, insert_row, get_row_for_doi, update_content_json_filepath, update_final_md_filepath, _to_relative, _to_absolute
 
 def test_create_database_success():
     """
@@ -89,3 +90,33 @@ def test_update_filepath_for_nonexistent_doi_is_noop(tmp_path):
     update_final_md_filepath("10.0/ghost", "/x.md", db)
 
     assert get_row_for_doi("10.0/ghost", db) is None
+
+
+def test_to_relative_absolute_path(tmp_path):
+    db = tmp_path / "sqlite.db"
+    stored = _to_relative(str(tmp_path / "manuscripts" / "paper.pdf"), db)
+    assert stored == str(Path("manuscripts") / "paper.pdf")
+
+
+def test_to_relative_already_relative(tmp_path):
+    db = tmp_path / "sqlite.db"
+    rel = str(Path("manuscripts") / "paper.pdf")
+    assert _to_relative(rel, db) == rel
+
+
+def test_to_absolute_relative_path(tmp_path):
+    db = tmp_path / "sqlite.db"
+    rel = str(Path("manuscripts") / "paper.pdf")
+    assert _to_absolute(rel, db) == str(tmp_path / "manuscripts" / "paper.pdf")
+
+
+def test_to_absolute_legacy_absolute(tmp_path):
+    db = tmp_path / "sqlite.db"
+    absolute = str(tmp_path / "manuscripts" / "paper.pdf")
+    assert _to_absolute(absolute, db) == absolute
+
+
+def test_roundtrip(tmp_path):
+    db = tmp_path / "sqlite.db"
+    original = str(tmp_path / "results" / "stem.md")
+    assert _to_absolute(_to_relative(original, db), db) == original

@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 import os
 import re
 from pathlib import Path
@@ -21,7 +21,7 @@ from biomarkit.standardisation.content_list.filters import (
 from biomarkit.standardisation.content_list.renderer import render
 from biomarkit.standardisation.llms.llm_classifier import LlamaClassifier
 from biomarkit.config import FINAL_MARKDOWN_DIR
-from biomarkit.text_download.database.database import update_final_md_filepath
+from biomarkit.text_download.database.database import update_final_md_filepath, _to_relative
 
 # Strips leading section numbering (e.g. "1.", "II.", "§3") before matching heading text.
 # Roman numeral chars (IVXivx) are only stripped when followed by a non-alpha character so
@@ -358,7 +358,7 @@ class Cleaner:
         # Add to cache.
         pub.final_md_filepath = output_path
         if self.cache:
-            update_final_md_filepath(pub.doi, str(output_path), self.cache)
+            update_final_md_filepath(pub.doi, _to_relative(str(output_path), self.cache), self.cache)
 
         return markdown
 

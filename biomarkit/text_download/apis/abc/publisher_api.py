@@ -2,7 +2,7 @@
 from abc import ABC, abstractmethod
 from typing import List
 from biomarkit.text_download.basemodels.publication import Publication
-from biomarkit.text_download.database.database import insert_row
+from biomarkit.text_download.database.database import insert_row, _to_relative
 from biomarkit.text_download.apis.strings import default_headers
 from biomarkit.text_download.utils.generics import progress_split_bar
 from biomarkit.config import USER_EMAIL, API_KEY_TO_NAME, API_URL_TO_NAME, DOWNLOAD_DIR, DB_CACHE_FILE_NAME, LOG_DIR
@@ -209,7 +209,8 @@ class PublisherApi(ABC):
         if pub.publication_filepath:
             self.logger.info("Adding publication to cache.")
             insert_row(doi=pub.doi, downloaded_from=self.name,
-                       publication_filepath=str(pub.publication_filepath), db_path=DB_CACHE_FILE_NAME)
+                       publication_filepath=_to_relative(str(pub.publication_filepath), DB_CACHE_FILE_NAME),
+                       db_path=DB_CACHE_FILE_NAME)
 
         else:
             self.logger.error("Publication object has no existing filepath attached. Why has it been passed for caching?")

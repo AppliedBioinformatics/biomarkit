@@ -4,7 +4,7 @@ from typing import List
 
 import biomarkit.config
 from biomarkit.text_download.basemodels.publication import Publication
-from biomarkit.text_download.database.database import create_database, get_row_for_doi
+from biomarkit.text_download.database.database import create_database, get_row_for_doi, _to_absolute
 
 
 class Controller:
@@ -73,9 +73,9 @@ class Controller:
                 )
                 continue
 
-            pub.publication_filepath = Path(row["publication_filepath"])
-            pub.content_json_filepath = Path(row["content_json_filepath"]) if row.get("content_json_filepath") else None
-            pub.final_md_filepath = Path(row["final_md_filepath"]) if row.get("final_md_filepath") else None
+            pub.publication_filepath = Path(_to_absolute(row["publication_filepath"], self.cache))
+            pub.content_json_filepath = Path(_to_absolute(row["content_json_filepath"], self.cache)) if row.get("content_json_filepath") else None
+            pub.final_md_filepath = Path(_to_absolute(row["final_md_filepath"], self.cache)) if row.get("final_md_filepath") else None
 
         logging.debug("Finished updating publication filepath states from cache.")
 
