@@ -310,3 +310,57 @@ def test_check_cache_for_markdowns_returns_none():
     _make_test_db([])
     result = check_cache_for_markdowns()
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# cleanup_intermediate_files
+# ---------------------------------------------------------------------------
+
+def _make_fake_auto_dir(tmp_path: Path) -> tuple:
+    """Returns (auto_dir, json_path) with realistic MinerU output structure."""
+    auto_dir = tmp_path / "stem" / "auto"
+    auto_dir.mkdir(parents=True)
+    json_path = auto_dir / "stem_content_list_v2.json"
+    json_path.write_text('{"pages": []}')
+    (auto_dir / "stem.md").write_text("raw markdown")
+    (auto_dir / "stem_model.json").write_text("{}")
+    images_dir = auto_dir / "images"
+    images_dir.mkdir()
+    (images_dir / "fig1.jpg").write_bytes(b"\xff")
+    return auto_dir, json_path
+
+
+class _FakePub:
+    def __init__(self, content_json_filepath):
+        self.content_json_filepath = content_json_filepath
+
+
+def test_cleanup_deletes_non_json_files(tmp_path):
+    from biomarkit.text_transformation.utils.generics import cleanup_intermediate_files
+
+    auto_dir, json_path = _make_fake_auto_dir(tmp_path)
+    pub = _FakePub(json_path)
+
+    cleanup_intermediate_files([pub])
+
+    remaining = list(auto_dir.iterdir())
+    assert remaining == [json_path]
+
+
+def test_cleanup_keeps_json_intact(tmp_path):
+    from biomarkit.text_transformation.utils.generics import cleanup_intermediate_files
+
+    auto_dir, json_path = _make_fake_auto_dir(tmp_path)
+    pub = _FakePub(json_path)
+
+    cleanup_intermediate_files([pub])
+
+    assert json_path.exists()
+    assert json_path.read_text() == '{"pages": []}'
+
+
+def test_cleanup_skips_pub_without_content_json_filepath():
+    from biomarkit.text_transformation.utils.generics import cleanup_intermediate_files
+
+    pub = _FakePub(None)
+    cleanup_intermediate_files([pub])  # should not raise

@@ -123,7 +123,8 @@ def transform_text(
     publications: list[Publication],
     mineru_backend: str = "local-gpu",
     mineru_batch_size: int | None = None,
-    generate_report: bool = False
+    generate_report: bool = False,
+    cleanup_intermediates: bool = True,
 ) -> list[Publication]:
     """
     Convert downloaded PDFs and XMLs into structured JSON content-list files.
@@ -148,6 +149,11 @@ def transform_text(
         Number of PDFs to send to MinerU per invocation. None sends all pending
         PDFs in a single call. Set a positive integer to process in sequential
         chunks — each completed chunk is cached before the next begins.
+    cleanup_intermediates : bool, default True
+        When True, non-essential MinerU output files (debug PDFs, raw markdown,
+        model metadata, extracted images) are deleted from the intermediates folder
+        after conversion, keeping only the *_content_list_v2.json files.
+        Set to False to preserve all MinerU output for debugging.
 
     Returns
     -------
@@ -156,7 +162,7 @@ def transform_text(
         Each object has content_json_filepath set if conversion succeeded.
     """
 
-    from biomarkit.text_transformation.utils.generics import prepare_bulk_transformation, finalise_transformation
+    from biomarkit.text_transformation.utils.generics import prepare_bulk_transformation, finalise_transformation, cleanup_intermediate_files
     from biomarkit.text_transformation.controller.controller import Controller
     from biomarkit.text_transformation.converters.elsevier2json import ElsevierXmlTransformer
     from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
@@ -190,7 +196,10 @@ def transform_text(
         )
 
     all_pubs = controller.needs_transformation + controller.needs_processing + controller.completed
-    return finalise_transformation(all_pubs)
+    all_pubs = finalise_transformation(all_pubs)
+    if cleanup_intermediates:
+        cleanup_intermediate_files(all_pubs)
+    return all_pubs
 
 def standardise_text(
     publications: list[Publication],
@@ -288,7 +297,11 @@ if __name__ == "__main__":
     logging.info("Corpus download completed.")
 
     # Convert.
-    publications = transform_text(publications, mineru_backend="local-gpu", mineru_batch_size=25)
+    publications = transform_text(publications,
+                                  mineru_backend="local-gpu",
+                                  mineru_batch_size=25,
+                                  cleanup_intermediates=True)
+
     logging.debug("Corpus transformation completed.")
 
     # Standardise.

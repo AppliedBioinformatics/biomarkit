@@ -176,5 +176,28 @@ def finalise_transformation(publications: list) -> list:
     return publications
 
 
+def cleanup_intermediate_files(publications: list) -> None:
+    """
+    Delete non-essential files produced by MinerU from each publication's
+    intermediates directory, keeping only the *_content_list_v2.json.
+    Publications without content_json_filepath are silently skipped.
+    """
+    deleted = 0
+    for pub in publications:
+        if pub.content_json_filepath is None:
+            continue
+        auto_dir = pub.content_json_filepath.parent
+        for item in auto_dir.iterdir():
+            if item == pub.content_json_filepath:
+                continue
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
+            deleted += 1
+
+    logging.debug(f"cleanup_intermediate_files: removed {deleted} items from intermediates/.")
+
+
 if __name__ == "__main__":
     check_mineru()
