@@ -91,28 +91,29 @@ def test_default_output_dir_is_raw_markdown_dir():
 # ---------------------------------------------------------------------------
 
 def test_cache_result_writes_content_json_filepath_to_db(tmp_path):
+    db = tmp_path / "sqlite.db"
     pub = _make_pub("10.1037/cr1", tmp_path)
     raw_md = tmp_path / "output.md"
     raw_md.touch()
 
-    _setup_db([{
-        "doi": pub.doi,
-        "downloaded_from": "publisher",
-        "publication_filepath": str(pub.publication_filepath),
-        "content_json_filepath": None,
-        "final_md_filepath": None,
-    }])
+    with sqlite3.connect(db) as conn:
+        conn.execute(DB_SCHEMA)
+        conn.execute(
+            "INSERT INTO cache (doi, downloaded_from, publication_filepath, content_json_filepath, final_md_filepath) "
+            "VALUES (?, ?, ?, NULL, NULL)",
+            (pub.doi, "publisher", str(pub.publication_filepath)),
+        )
 
     pub.content_json_filepath = raw_md
 
     from biomarkit.text_transformation.converters.ABC.transformer import Transformer
     cls = _make_converter_class(lambda p: None)
     converter = cls(publication_list=[pub])
-    converter.cache = TMP_DB
+    converter.cache = db
     converter._cache_result(pub)
 
-    row = get_row_for_doi(pub.doi, TMP_DB)
-    assert row["content_json_filepath"] == str(raw_md)
+    row = get_row_for_doi(pub.doi, db)
+    assert row["content_json_filepath"] == "output.md"
 
 
 # ---------------------------------------------------------------------------
