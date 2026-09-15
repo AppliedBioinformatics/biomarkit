@@ -119,6 +119,16 @@ class PlaywrightPublisherApi(PublisherApi):
         self.page = None
         self._initialized = False
 
+        # Drain any pending asyncio callbacks left by Playwright's internal
+        # connection teardown. Without this, the thread-pool shutdown sees
+        # cancelled futures and logs TargetClosedError / "Task was destroyed".
+        try:
+            loop = asyncio.get_event_loop()
+            if not loop.is_closed():
+                loop.run_until_complete(asyncio.sleep(0))
+        except Exception:
+            pass
+
     # --- Unpaywall PDF URL lookup ---
     def _get_pdf_url(self, doi: str) -> Optional[str]:
         """

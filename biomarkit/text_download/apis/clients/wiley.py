@@ -36,6 +36,12 @@ class WileyClient(PublisherApi):
             raise ValueError("WILEY_TDM_TOKEN environment variable not set. Please update .env file with WILEY_TDM_TOKEN.")
 
         tdm=TDMClient(api_token=WILEY_TDM_TOKEN, download_dir=TMP_DIR)
+
+        # wiley_tdm logs all non-success statuses (e.g. Access Denied) at ERROR
+        # level internally. These are handled gracefully by download_paper(), so
+        # suppress them to avoid alarming output noise.
+        logging.getLogger("wiley_tdm").setLevel(logging.CRITICAL)
+
         self.logger.info("Connected to Wiley via TDM.")
 
         return tdm
