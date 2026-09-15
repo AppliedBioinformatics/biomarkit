@@ -1,7 +1,178 @@
 ﻿import pytest
 from unittest.mock import patch
+from pathlib import Path
 
 from biomarkit.text_download.utils.generics import create_corpus, build_new_corpus
+from biomarkit.text_download.database.database import create_database, insert_row, update_content_json_filepath, update_final_md_filepath
+from biomarkit.main import load_corpus
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_SCOPUS_HEADER = "Title,Year,DOI,Publisher,Abstract\n"
+
+def _write_scopus_csv(path: Path, rows: list[dict]) -> None:
+    lines = _SCOPUS_HEADER
+    for r in rows:
+        lines += f"{r['title']},{r['year']},{r['doi']},{r['publisher']},{r.get('abstract', 'No abstract.')}\n"
+    path.write_text(lines, encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# load_corpus tests
+# ---------------------------------------------------------------------------
+
+def test_load_corpus_returns_all_publications_from_csv(tmp_path):
+    csv = tmp_path / "scopus.csv"
+    _write_scopus_csv(csv, [
+        {"doi": "10.1000/aaa", "title": "Paper A", "publisher": "Elsevier", "year": 2021},
+        {"doi": "10.1000/bbb", "title": "Paper B", "publisher": "Springer", "year": 2022},
+    ])
+
+    db = tmp_path / "sqlite.db"
+    create_database(db)
+
+    with patch("biomarkit.config.SCOPUS_INPUT_CSV_NAME", csv), \
+         patch("biomarkit.config.DB_CACHE_FILE_NAME", db):
+        pubs = load_corpus()
+
+    assert len(pubs) == 2
+    dois = {p.doi for p in pubs}
+    assert "10.1000/aaa" in dois
+    assert "10.1000/bbb" in dois
+
+
+def test_load_corpus_no_filepaths_when_cache_is_empty(tmp_path):
+    csv = tmp_path / "scopus.csv"
+    _write_scopus_csv(csv, [
+        {"doi": "10.1000/aaa", "title": "Paper A", "publisher": "Elsevier", "year": 2021},
+    ])
+    db = tmp_path / "sqlite.db"
+    create_database(db)
+
+    with patch("biomarkit.config.SCOPUS_INPUT_CSV_NAME", csv), \
+         patch("biomarkit.config.DB_CACHE_FILE_NAME", db):
+        pubs = load_corpus()
+
+    assert pubs[0].publication_filepath is None
+    assert pubs[0].content_json_filepath is None
+    assert pubs[0].final_md_filepath is None
+
+
+def test_load_corpus_populates_publication_filepath_from_cache(tmp_path):
+    csv = tmp_path / "scopus.csv"
+    _write_scopus_csv(csv, [
+        {"doi": "10.1000/aaa", "title": "Paper A", "publisher": "Elsevier", "year": 2021},
+    ])
+    db = tmp_path / "sqlite.db"
+    create_database(db)
+
+    pdf = tmp_path / "manuscripts" / "paper_a.pdf"
+    pdf.parent.mkdir()
+    pdf.write_bytes(b"%PDF-1.4 %%EOF")
+
+    insert_row("10.1000/aaa", "Elsevier", str(pdf), db)
+
+    with patch("biomarkit.config.SCOPUS_INPUT_CSV_NAME", csv), \
+         patch("biomarkit.config.DB_CACHE_FILE_NAME", db):
+        pubs = load_corpus()
+
+    assert pubs[0].publication_filepath is not None
+    assert Path(pubs[0].publication_filepath).name == "paper_a.pdf"
+
+
+def test_load_corpus_populates_all_three_filepaths_from_cache(tmp_path):
+    csv = tmp_path / "scopus.csv"
+    _write_scopus_csv(csv, [
+        {"doi": "10.1000/aaa", "title": "Paper A", "publisher": "Elsevier", "year": 2021},
+    ])
+    db = tmp_path / "sqlite.db"
+    create_database(db)
+
+    pdf = tmp_path / "manuscripts" / "paper_a.pdf"
+    pdf.parent.mkdir()
+    pdf.write_bytes(b"%PDF-1.4 %%EOF")
+
+    json_file = tmp_path / "intermediates" / "paper_a.json"
+    json_file.parent.mkdir()
+    json_file.write_text("{}", encoding="utf-8")
+
+    md_file = tmp_path / "results" / "paper_a.md"
+    md_file.parent.mkdir()
+    md_file.write_text("# Paper A", encoding="utf-8")
+
+    insert_row("10.1000/aaa", "Elsevier", str(pdf), db)
+    update_content_json_filepath("10.1000/aaa", str(json_file), db)
+    update_final_md_filepath("10.1000/aaa", str(md_file), db)
+
+    with patch("biomarkit.config.SCOPUS_INPUT_CSV_NAME", csv), \
+         patch("biomarkit.config.DB_CACHE_FILE_NAME", db):
+        pubs = load_corpus()
+
+    pub = pubs[0]
+    assert pub.is_cached
+    assert pub.is_converted
+    assert pub.is_processed
+
+
+def test_load_corpus_partial_cache_hit(tmp_path):
+    csv = tmp_path / "scopus.csv"
+    _write_scopus_csv(csv, [
+        {"doi": "10.1000/aaa", "title": "Paper A", "publisher": "Elsevier", "year": 2021},
+        {"doi": "10.1000/bbb", "title": "Paper B", "publisher": "Springer", "year": 2022},
+    ])
+    db = tmp_path / "sqlite.db"
+    create_database(db)
+
+    pdf = tmp_path / "manuscripts" / "paper_a.pdf"
+    pdf.parent.mkdir()
+    pdf.write_bytes(b"%PDF-1.4 %%EOF")
+    insert_row("10.1000/aaa", "Elsevier", str(pdf), db)
+
+    with patch("biomarkit.config.SCOPUS_INPUT_CSV_NAME", csv), \
+         patch("biomarkit.config.DB_CACHE_FILE_NAME", db):
+        pubs = load_corpus()
+
+    assert len(pubs) == 2
+    cached = next(p for p in pubs if p.doi == "10.1000/aaa")
+    uncached = next(p for p in pubs if p.doi == "10.1000/bbb")
+    assert cached.is_cached
+    assert not uncached.is_cached
+
+
+def test_load_corpus_no_cache_file(tmp_path):
+    csv = tmp_path / "scopus.csv"
+    _write_scopus_csv(csv, [
+        {"doi": "10.1000/aaa", "title": "Paper A", "publisher": "Elsevier", "year": 2021},
+    ])
+    db = tmp_path / "sqlite.db"  # intentionally not created
+
+    with patch("biomarkit.config.SCOPUS_INPUT_CSV_NAME", csv), \
+         patch("biomarkit.config.DB_CACHE_FILE_NAME", db):
+        pubs = load_corpus()
+
+    assert len(pubs) == 1
+    assert pubs[0].publication_filepath is None
+
+
+def test_load_corpus_preserves_metadata_from_csv(tmp_path):
+    csv = tmp_path / "scopus.csv"
+    _write_scopus_csv(csv, [
+        {"doi": "10.1000/aaa", "title": "Effects of X on Y", "publisher": "Elsevier", "year": 2019, "abstract": "Some abstract."},
+    ])
+    db = tmp_path / "sqlite.db"
+    create_database(db)
+
+    with patch("biomarkit.config.SCOPUS_INPUT_CSV_NAME", csv), \
+         patch("biomarkit.config.DB_CACHE_FILE_NAME", db):
+        pubs = load_corpus()
+
+    pub = pubs[0]
+    assert pub.title == "Effects of X on Y"
+    assert pub.year == 2019
+    assert pub.abstract == "Some abstract."
 
 
 def test_create_corpus_builds_folder_structure(tmp_path):
