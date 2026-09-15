@@ -28,6 +28,45 @@ def build_new_corpus(name: str, scopus_file: str | Path, set_active: bool = True
     from biomarkit.text_download.utils.generics import build_new_corpus as _build_new_corpus
     return _build_new_corpus(name=name, scopus_file=scopus_file, set_active=set_active)
 
+def load_corpus() -> list[Publication]:
+    """
+    Reconstruct Publication objects for the active corpus from the Scopus CSV and the cache.
+
+    Reads the Scopus CSV to build the base Publication objects (doi, title, publisher, year,
+    abstract), then cross-references the SQLite cache to populate all three filepath fields
+    (publication_filepath, content_json_filepath, final_md_filepath) wherever they exist.
+    No downloading or conversion is performed.
+
+    Returns
+    -------
+    list[Publication]
+        All publications from the Scopus CSV. Publications that have never been downloaded
+        will have all three filepath fields as None.
+    """
+    from biomarkit.config import SCOPUS_INPUT_CSV_NAME, DB_CACHE_FILE_NAME
+    from biomarkit.text_download.filter import filter_scopus_csv as ftr
+    from biomarkit.text_download.database.database import get_row_for_doi, _to_absolute
+
+    raw_df = ftr.load_scopus_csv(SCOPUS_INPUT_CSV_NAME)
+    df = ftr.remove_imperfect_rows(df=raw_df)
+    df = ftr.synchronise_publishers(df=df)
+    publications = ftr.build_publication_objects(df=df)
+
+    if DB_CACHE_FILE_NAME.exists():
+        for pub in publications:
+            row = get_row_for_doi(pub.doi, db_path=DB_CACHE_FILE_NAME)
+            if row is None:
+                continue
+            if row.get("publication_filepath"):
+                pub.publication_filepath = _to_absolute(row["publication_filepath"], DB_CACHE_FILE_NAME)
+            if row.get("content_json_filepath"):
+                pub.content_json_filepath = _to_absolute(row["content_json_filepath"], DB_CACHE_FILE_NAME)
+            if row.get("final_md_filepath"):
+                pub.final_md_filepath = _to_absolute(row["final_md_filepath"], DB_CACHE_FILE_NAME)
+
+    return publications
+
+
 def download_corpus(check_opensource: bool = True, generate_report: bool = False) -> list[Publication]:
     """
     Download full-text PDFs and XMLs for all publications in the active corpus's Scopus CSV.
