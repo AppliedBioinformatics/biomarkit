@@ -10,7 +10,7 @@ from collections import defaultdict
 from tqdm import tqdm
 from biomarkit.text_download.basemodels.publication import Publication
 from biomarkit.text_download.database.database import create_database
-from biomarkit.config import LOG_DIR, DOWNLOAD_DIR, REPORT_DIR, DB_CACHE_FILE_NAME, SCOPUS_INPUT_CSV_NAME
+from biomarkit.config import LOG_DIR, DOWNLOAD_DIR, REPORT_DIR, DB_CACHE_FILE_NAME, SCOPUS_INPUT_CSV_NAME, CORPUS_DIR
 
 
 class _TqdmLoggingHandler(logging.Handler):
@@ -177,7 +177,7 @@ def clean_publications(folder: Path = DOWNLOAD_DIR, db_path: Path = DB_CACHE_FIL
 
 
     # Store tracked paths in a set for faster lookup
-    tracked_files = {Path(row[0]) for row in cursor.fetchall()}
+    tracked_files = {(CORPUS_DIR / row[0]).resolve() for row in cursor.fetchall()}
     logging.debug(f"SETUP - Found {len(tracked_files)} publications stored in cache.")
     conn.close()
 
