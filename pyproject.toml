@@ -1,10 +1,10 @@
 [project]
 name = "biomarkit"
-version = "1.0.11"
+version = "1.0.14"
 description = "Downloads full-text scientific publications from a Scopus query and converts them into standardised Markdown."
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.12,<3.14"
+requires-python = ">=3.12,<3.13"
 authors = [{ name = "Jack Bruton", email = "jack.bruton@hotmail.com" }]
 dependencies = [
     "mineru[pipeline]>=3.4.0",

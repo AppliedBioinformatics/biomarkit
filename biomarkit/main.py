@@ -30,39 +30,47 @@ def build_new_corpus(name: str, scopus_file: str | Path, set_active: bool = True
 
 def load_corpus() -> list[Publication]:
     """
-    Reconstruct Publication objects for the active corpus from the Scopus CSV and the cache.
+    Reconstruct Publication objects for publications that are already in the download cache.
 
-    Reads the Scopus CSV to build the base Publication objects (doi, title, publisher, year,
-    abstract), then cross-references the SQLite cache to populate all three filepath fields
-    (publication_filepath, content_json_filepath, final_md_filepath) wherever they exist.
+    Reads all DOIs from the SQLite cache, filters the Scopus CSV to only those DOIs to
+    obtain metadata (title, publisher, year, abstract), then populates all three filepath
+    fields (publication_filepath, content_json_filepath, final_md_filepath) from the cache.
     No downloading or conversion is performed.
 
     Returns
     -------
     list[Publication]
-        All publications from the Scopus CSV. Publications that have never been downloaded
-        will have all three filepath fields as None.
+        One Publication per DOI found in the cache, with metadata from the Scopus CSV and
+        filepaths populated wherever they exist in the cache.
     """
     from biomarkit.config import SCOPUS_INPUT_CSV_NAME, DB_CACHE_FILE_NAME
     from biomarkit.text_download.filter import filter_scopus_csv as ftr
-    from biomarkit.text_download.database.database import get_row_for_doi, _to_absolute
+    from biomarkit.text_download.database.database import get_all_cached_dois, get_row_for_doi, _to_absolute
+
+    if not DB_CACHE_FILE_NAME.exists():
+        return []
+
+    cached_dois = set(get_all_cached_dois(DB_CACHE_FILE_NAME))
+    if not cached_dois:
+        return []
 
     raw_df = ftr.load_scopus_csv(SCOPUS_INPUT_CSV_NAME)
     df = ftr.remove_imperfect_rows(df=raw_df)
     df = ftr.synchronise_publishers(df=df)
+    df = df[df["DOI"].isin(cached_dois)]
+
     publications = ftr.build_publication_objects(df=df)
 
-    if DB_CACHE_FILE_NAME.exists():
-        for pub in publications:
-            row = get_row_for_doi(pub.doi, db_path=DB_CACHE_FILE_NAME)
-            if row is None:
-                continue
-            if row.get("publication_filepath"):
-                pub.publication_filepath = _to_absolute(row["publication_filepath"], DB_CACHE_FILE_NAME)
-            if row.get("content_json_filepath"):
-                pub.content_json_filepath = _to_absolute(row["content_json_filepath"], DB_CACHE_FILE_NAME)
-            if row.get("final_md_filepath"):
-                pub.final_md_filepath = _to_absolute(row["final_md_filepath"], DB_CACHE_FILE_NAME)
+    for pub in publications:
+        row = get_row_for_doi(pub.doi, db_path=DB_CACHE_FILE_NAME)
+        if row is None:
+            continue
+        if row.get("publication_filepath"):
+            pub.publication_filepath = _to_absolute(row["publication_filepath"], DB_CACHE_FILE_NAME)
+        if row.get("content_json_filepath"):
+            pub.content_json_filepath = _to_absolute(row["content_json_filepath"], DB_CACHE_FILE_NAME)
+        if row.get("final_md_filepath"):
+            pub.final_md_filepath = _to_absolute(row["final_md_filepath"], DB_CACHE_FILE_NAME)
 
     return publications
 

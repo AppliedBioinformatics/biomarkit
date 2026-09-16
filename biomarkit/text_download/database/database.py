@@ -113,6 +113,23 @@ def update_final_md_filepath(doi: str, final_md_filepath: str, db_path: Union[st
         conn.commit()
 
 
+def get_all_cached_dois(db_path: Union[str, Path]) -> list[str]:
+    """
+    Returns all DOIs present in the cache database.
+
+    Parameters
+    ----------
+    db_path : Union[str, Path] - Path to the SQLite database file.
+
+    Returns
+    -------
+    list[str]
+    """
+    with sqlite3.connect(str(db_path)) as conn:
+        cursor = conn.execute("SELECT doi FROM cache")
+        return [row[0] for row in cursor.fetchall()]
+
+
 def get_row_for_doi(doi: str, db_path: Path) -> dict or None:
     """
     Searches the cache for a DOI. Returns the row if found, None otherwise. Row is returned in the following format:
