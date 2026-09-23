@@ -2,15 +2,18 @@ from pathlib import Path
 from dotenv import load_dotenv
 from os import getenv
 
-# Workspace root: users set BIOMARKIT_DIR to their preferred storage location;
-# falls back to the current working directory if unset.
-BASE_DIR = Path(getenv("BIOMARKIT_DIR", ".")).resolve()
+# Repo root is two levels above this file (biomarkit/biomarkit/config.py → repo root).
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
+# Load secrets.env from the repo root so BIOMARKIT_DIR is available before we use it.
+load_dotenv(dotenv_path=_REPO_ROOT / "secrets.env")
+
+# Workspace root: users set BIOMARKIT_DIR in secrets.env or the environment;
+# falls back to the repo root if unset.
+BASE_DIR = Path(getenv("BIOMARKIT_DIR", _REPO_ROOT)).resolve()
 
 # Filepath for secrets.env — lives alongside the corpora in the workspace root.
 SECRETS_FILE = BASE_DIR / "secrets.env"
-
-# Load secrets before reading any values.
-load_dotenv(dotenv_path=SECRETS_FILE)
 
 # Corpus selection — set CORPUS_NAME in secrets.env to choose the active corpus.
 CORPUS_NAME = getenv("CORPUS_NAME", "default")

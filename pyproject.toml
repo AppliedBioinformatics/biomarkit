@@ -7,7 +7,7 @@ license = { file = "LICENSE" }
 requires-python = ">=3.12,<3.13"
 authors = [{ name = "Jack Bruton", email = "jack.bruton@hotmail.com" }]
 dependencies = [
-    "mineru[pipeline]>=3.4.0",
+    "mineru[pipeline]>=3.4.0,<4",
     "openai>=1.0.0",
     "pandas>=2.3.3",
     "playwright>=1.56.0",

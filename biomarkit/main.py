@@ -347,7 +347,7 @@ if __name__ == "__main__":
     publications = transform_text(publications,
                                   mineru_backend="local-gpu",
                                   mineru_batch_size=25,
-                                  cleanup_intermediates=True)
+                                  cleanup_intermediates=False)
 
     logging.debug("Corpus transformation completed.")
 
