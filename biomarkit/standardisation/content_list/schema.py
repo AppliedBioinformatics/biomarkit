@@ -76,19 +76,19 @@ class EquationInterlineContent(BaseModel):
 
 
 class PageHeaderContent(BaseModel):
-    page_header_content: list[TextSpan]
+    page_header_content: list[InlineContent]
 
 
 class PageFooterContent(BaseModel):
-    page_footer_content: list[TextSpan]
+    page_footer_content: list[InlineContent]
 
 
 class PageFootnoteContent(BaseModel):
-    page_footnote_content: list[TextSpan]
+    page_footnote_content: list[InlineContent]
 
 
 class PageNumberContent(BaseModel):
-    page_number_content: list[TextSpan]
+    page_number_content: list[InlineContent]
 
 
 

@@ -244,6 +244,7 @@ def transform_text(
 
     all_pubs = controller.needs_transformation + controller.needs_processing + controller.completed
     all_pubs = finalise_transformation(all_pubs)
+
     if cleanup_intermediates:
         cleanup_intermediate_files(all_pubs)
     return all_pubs
@@ -309,7 +310,7 @@ def standardise_text(
     logging.debug("Preflight checks passed. Proceeding with standardisation.")
 
     # Get only publications that have not already been standardised (final_md_filepath is not set in the cache).
-    publications = [p for p in publications if p.content_json_filepath is not None]
+    publications = [p for p in publications if p.content_json_filepath is not None and p.final_md_filepath is None]
     logging.debug(f"standardise_text: {len(publications)} publications have raw markdown files.")
 
     # Build the custom instructions for the Cleaner class.
@@ -340,14 +341,14 @@ if __name__ == "__main__":
     logging.info("Complete a full new corpus conversion.")
 
     # Download.
-    publications = download_corpus(check_opensource=True, generate_report=False)
+    publications = download_corpus(check_opensource=True, generate_report=True)
     logging.info("Corpus download completed.")
 
     # Convert.
     publications = transform_text(publications,
                                   mineru_backend="local-gpu",
                                   mineru_batch_size=25,
-                                  cleanup_intermediates=False)
+                                  cleanup_intermediates=True)
 
     logging.debug("Corpus transformation completed.")
 

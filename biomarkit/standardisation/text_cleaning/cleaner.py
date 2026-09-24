@@ -381,7 +381,13 @@ class Cleaner:
         with tqdm(self.publications, desc="Standardising", unit="pub",
                   leave=True, dynamic_ncols=True) as bar:
             for publication in bar:
-                self.clean_from_json(pub=publication)
+                try:
+                    self.clean_from_json(pub=publication)
+                except Exception as e:
+                    failed += 1
+                    bar.write(f"[WARN] skipped {publication.doi}: {e}")
+                    bar.set_postfix_str(progress_split_bar(success, failed, total))
+                    continue
                 if publication.final_md_filepath is not None:
                     success += 1
                 else:
