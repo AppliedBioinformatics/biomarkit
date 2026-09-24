@@ -1,6 +1,6 @@
 [project]
 name = "biomarkit"
-version = "1.0.14"
+version = "1.0.15"
 description = "Downloads full-text scientific publications from a Scopus query and converts them into standardised Markdown."
 readme = "README.md"
 license = { file = "LICENSE" }
