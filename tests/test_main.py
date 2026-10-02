@@ -34,6 +34,14 @@ def test_load_corpus_returns_all_publications_from_csv(tmp_path):
     db = tmp_path / "sqlite.db"
     create_database(db)
 
+    pdf_a = tmp_path / "manuscripts" / "paper_a.pdf"
+    pdf_a.parent.mkdir()
+    pdf_a.write_bytes(b"%PDF-1.4 %%EOF")
+    pdf_b = tmp_path / "manuscripts" / "paper_b.pdf"
+    pdf_b.write_bytes(b"%PDF-1.4 %%EOF")
+    insert_row("10.1000/aaa", "elsevier", str(pdf_a), db)
+    insert_row("10.1000/bbb", "springer", str(pdf_b), db)
+
     with patch("biomarkit.config.SCOPUS_INPUT_CSV_NAME", csv), \
          patch("biomarkit.config.DB_CACHE_FILE_NAME", db):
         pubs = load_corpus()
@@ -44,7 +52,7 @@ def test_load_corpus_returns_all_publications_from_csv(tmp_path):
     assert "10.1000/bbb" in dois
 
 
-def test_load_corpus_no_filepaths_when_cache_is_empty(tmp_path):
+def test_load_corpus_no_json_or_md_filepath_when_not_yet_converted(tmp_path):
     csv = tmp_path / "scopus.csv"
     _write_scopus_csv(csv, [
         {"doi": "10.1000/aaa", "title": "Paper A", "publisher": "Elsevier", "year": 2021},
@@ -52,11 +60,16 @@ def test_load_corpus_no_filepaths_when_cache_is_empty(tmp_path):
     db = tmp_path / "sqlite.db"
     create_database(db)
 
+    pdf = tmp_path / "manuscripts" / "paper_a.pdf"
+    pdf.parent.mkdir()
+    pdf.write_bytes(b"%PDF-1.4 %%EOF")
+    insert_row("10.1000/aaa", "elsevier", str(pdf), db)
+
     with patch("biomarkit.config.SCOPUS_INPUT_CSV_NAME", csv), \
          patch("biomarkit.config.DB_CACHE_FILE_NAME", db):
         pubs = load_corpus()
 
-    assert pubs[0].publication_filepath is None
+    assert pubs[0].publication_filepath is not None
     assert pubs[0].content_json_filepath is None
     assert pubs[0].final_md_filepath is None
 
@@ -135,11 +148,9 @@ def test_load_corpus_partial_cache_hit(tmp_path):
          patch("biomarkit.config.DB_CACHE_FILE_NAME", db):
         pubs = load_corpus()
 
-    assert len(pubs) == 2
-    cached = next(p for p in pubs if p.doi == "10.1000/aaa")
-    uncached = next(p for p in pubs if p.doi == "10.1000/bbb")
-    assert cached.is_cached
-    assert not uncached.is_cached
+    assert len(pubs) == 1
+    assert pubs[0].doi == "10.1000/aaa"
+    assert pubs[0].is_cached
 
 
 def test_load_corpus_no_cache_file(tmp_path):
@@ -153,8 +164,7 @@ def test_load_corpus_no_cache_file(tmp_path):
          patch("biomarkit.config.DB_CACHE_FILE_NAME", db):
         pubs = load_corpus()
 
-    assert len(pubs) == 1
-    assert pubs[0].publication_filepath is None
+    assert len(pubs) == 0
 
 
 def test_load_corpus_preserves_metadata_from_csv(tmp_path):
@@ -164,6 +174,11 @@ def test_load_corpus_preserves_metadata_from_csv(tmp_path):
     ])
     db = tmp_path / "sqlite.db"
     create_database(db)
+
+    pdf = tmp_path / "manuscripts" / "paper_a.pdf"
+    pdf.parent.mkdir()
+    pdf.write_bytes(b"%PDF-1.4 %%EOF")
+    insert_row("10.1000/aaa", "elsevier", str(pdf), db)
 
     with patch("biomarkit.config.SCOPUS_INPUT_CSV_NAME", csv), \
          patch("biomarkit.config.DB_CACHE_FILE_NAME", db):

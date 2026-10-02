@@ -23,7 +23,15 @@ class _TqdmLoggingHandler(logging.Handler):
 
 
 def _secrets_path() -> Path:
-    return Path(__file__).resolve().parents[2] / "secrets.env"
+    from os import getenv as _getenv
+    from biomarkit.config import _REPO_ROOT
+    candidates = [
+        Path(_getenv("BIOMARKIT_SECRETS")) if _getenv("BIOMARKIT_SECRETS") else None,
+        Path.cwd() / "secrets.env",
+        _REPO_ROOT / "secrets.env",
+    ]
+    found = next((p for p in candidates if p and p.exists()), None)
+    return found if found else Path.cwd() / "secrets.env"
 
 
 def create_corpus(name: str) -> Path:

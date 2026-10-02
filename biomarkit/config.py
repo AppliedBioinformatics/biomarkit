@@ -2,18 +2,22 @@ from pathlib import Path
 from dotenv import load_dotenv
 from os import getenv
 
-# Repo root is two levels above this file (biomarkit/biomarkit/config.py → repo root).
+# Source-checkout fallback only — resolves correctly in dev but points into site-packages when installed.
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# Load secrets.env from the repo root so BIOMARKIT_DIR is available before we use it.
-load_dotenv(dotenv_path=_REPO_ROOT / "secrets.env")
+# Resolve secrets.env: (1) BIOMARKIT_SECRETS env var, (2) cwd, (3) repo root (dev fallback).
+_secrets_candidates = [
+    Path(getenv("BIOMARKIT_SECRETS")) if getenv("BIOMARKIT_SECRETS") else None,
+    Path.cwd() / "secrets.env",
+    _REPO_ROOT / "secrets.env",
+]
+SECRETS_FILE = next((p for p in _secrets_candidates if p and p.exists()), None)
+if SECRETS_FILE:
+    load_dotenv(dotenv_path=SECRETS_FILE)
 
 # Workspace root: users set BIOMARKIT_DIR in secrets.env or the environment;
-# falls back to the repo root if unset.
-BASE_DIR = Path(getenv("BIOMARKIT_DIR", _REPO_ROOT)).resolve()
-
-# Filepath for secrets.env — lives alongside the corpora in the workspace root.
-SECRETS_FILE = BASE_DIR / "secrets.env"
+# falls back to cwd so installed usage works without any extra configuration.
+BASE_DIR = Path(getenv("BIOMARKIT_DIR", Path.cwd())).resolve()
 
 # Corpus selection — set CORPUS_NAME in secrets.env to choose the active corpus.
 CORPUS_NAME = getenv("CORPUS_NAME", "default")
