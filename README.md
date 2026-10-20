@@ -3,6 +3,17 @@
 A Python package for automated publisher-agnostic corpus download and structured Markdown file conversion 
 for full-text scientific publications.
 
+> [!NOTE]
+> **New in 1.1**
+> - **Choose your corpus in code:** `biomarkit.load_corpus("my_corpus", scopus_file=...)` selects (and, if needed,
+>   builds) the corpus for your script. No more editing `CORPUS_NAME` in `secrets.env`.
+> - **MinerU 4:** PDF conversion now uses MinerU 4, with quality tiers (`transform_text(mineru_tier="basic" | "standard" | "advanced")`)
+>   and cleaner text, fewer ligature errors and better inline equations.
+> - **More papers downloaded:** papers with no publisher in the Scopus export are no longer skipped, and publishers are
+>   inferred from the DOI prefix, so more papers reach the right publisher API. Frontiers and MDPI downloads also fail less often.
+>
+> Upgrading from 1.0? 1.1 includes breaking changes. See the [migration guide](https://github.com/AppliedBioinformatics/biomarkit/blob/main/MIGRATE.md).
+
 ---
 
 ## Overview
