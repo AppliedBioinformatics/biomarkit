@@ -109,6 +109,13 @@ Setting `check_opensource=False` will skip checking open-source download availab
 such as BioRxiv and Unpaywall and attempt to download the full-text directly from publisher-specific routes. This can
 save alot of time but is likley to reduce the total number of successful downloads.
 
+Setting `infer_publisher_from_doi=False` turns off publisher inference from DOI prefixes. By default, papers whose
+Scopus export has no publisher, or a publisher name biomarkit doesn't recognise, get a publisher guessed from the
+first part of their DOI (e.g. `10.1016/...` is Elsevier and `10.1007/...` is Springer), so they can still be
+downloaded through that publisher's API. A recognised publisher from Scopus is never overridden. Papers whose
+publisher can't be determined are still attempted through the open-access routes. Only rows missing a DOI, title or
+year are skipped.
+
 Setting `generate_report=True` will generate a HTML report that plots various metrics associated with the
 success/failure rates of the function. This includes information such as the total percentage of successful downloads.
 All reports for a corpus are saved inside the corpus `/reports` folder.

@@ -97,7 +97,8 @@ def load_corpus(corpus: str | Path, scopus_file: str | Path | None = None,
 
     return publications
 
-def download_corpus(check_opensource: bool = True, generate_report: bool = False) -> list[Publication]:
+def download_corpus(check_opensource: bool = True, generate_report: bool = False,
+                    infer_publisher_from_doi: bool = True) -> list[Publication]:
     """
     Download full-text PDFs and XMLs for all publications in the active corpus's Scopus CSV.
 
@@ -112,6 +113,11 @@ def download_corpus(check_opensource: bool = True, generate_report: bool = False
     check_opensource : bool, default True
         When True, attempt open-access routes before falling back to publisher APIs.
         Set to False to skip directly to publisher specific APIs.
+    infer_publisher_from_doi : bool, default True
+        When True, papers whose Scopus publisher is missing or not recognised get a
+        publisher inferred from their DOI prefix (e.g. 10.1016 -> Elsevier), so they can
+        be routed to that publisher's API client. A recognised Scopus publisher is never
+        overridden. Papers without a known publisher still get the open-access routes.
 
     Returns
     -------
@@ -141,7 +147,7 @@ def download_corpus(check_opensource: bool = True, generate_report: bool = False
 
     # Filter + Synchronize. (Can add more steps here)
     df = ftr.remove_imperfect_rows(df=raw_df)
-    df = ftr.synchronise_publishers(df=df)
+    df = ftr.synchronise_publishers(df=df, infer_from_doi=infer_publisher_from_doi)
 
     # Convert all remaining rows into standardized publication objects.
     publications = ftr.build_publication_objects(df=df)
