@@ -16,7 +16,20 @@ class InlineEquation(BaseModel):
     content: str
 
 
-InlineContent = Annotated[Union[TextSpan, InlineEquation], Field(discriminator="type")]
+class InlineCode(BaseModel):
+    """MinerU 4+ inline code span; rendered as its plain text."""
+    type: Literal["code_inline"]
+    content: str
+
+
+class Hyperlink(BaseModel):
+    """MinerU 4+ hyperlink span. content is the link's plain text, which is what gets rendered."""
+    type: Literal["hyperlink"]
+    content: str
+    url: str = ""
+
+
+InlineContent = Annotated[Union[TextSpan, InlineEquation, InlineCode, Hyperlink], Field(discriminator="type")]
 
 # Shared sub-models
 class ImageSource(BaseModel):

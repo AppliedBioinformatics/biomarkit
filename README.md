@@ -15,8 +15,10 @@ attempted using specific publisher APIs including Elsevier, Wiley, Springer, MDP
 
 ### Derive JSON manuscript structures from PDF and XML files with `transform_text()`.
 Converts downloaded PDFs and XML files into a single, structured JSON format. XMLs are parsed directly, and PDFs are
-converted locally via MinerU (GPU can be used here for performance improvements – See [MinerU](https://github.com/opendatalab/mineru)).
-Captures other outputs including raw texts and figures.
+converted locally with [MinerU](https://github.com/opendatalab/mineru) 4. Choose a MinerU quality tier with
+`mineru_tier`: `"basic"` (small models only, fine on CPU), `"standard"` (default; adds the MinerU vision-language model
+for complex layouts, best on a GPU) or `"advanced"` (more VLM compute for hard documents). Captures other outputs
+including raw texts and figures.
 
 
 ### Convert all manuscripts to a customisable Markdown format with `standardise_text()`.
@@ -41,8 +43,8 @@ biomarkit.load_corpus("my_corpus", scopus_file="path/to/scopus.csv")
 # Attempt download for all DOIs:
 publications = biomarkit.download_corpus(check_opensource=True, generate_report=True)
 
-# Run OCR and XML parser to generate JSON document structures:
-publications = biomarkit.transform_text(publications)
+# Run MinerU and the XML parser to generate JSON document structures:
+publications = biomarkit.transform_text(publications, mineru_tier="standard")
 
 # Build final markdown files:
 biomarkit.standardise_text(publications, keep_figures=False, keep_tables=True, keep_latex=True, force_imrad_structure=True)
@@ -102,6 +104,8 @@ All user-facing settings live in `secrets.env` (copy from [`secrets.env.example`
 | `ELSEVIER_API_KEY` | Elsevier API key (optional) |
 | `LLM_BASE_URL` | OpenAI-compatible endpoint for the fallback section classifier (defaults to local [Ollama](https://ollama.com)) |
 | `LLM_MODEL_NAME` | Model used by the fallback classifier (default `gemma3:12b`) |
+| `MINERU_VLM_SERVER_URL` | Optional remote server for MinerU's VLM (e.g. vLLM serving `opendatalab/MinerU2.5-Pro-2605-1.2B`); leave blank to run the VLM locally |
+| `MINERU_VLM_API_KEY` | API key for that server, if it requires one |
 
 ### The corpus folder structure
 
@@ -128,7 +132,10 @@ Everything is created automatically. Create a new corpus with `load_corpus("my_c
 - Optional: [Ollama](https://ollama.com/download) running `gemma3:12b` (~8 GB), used as an LLM fallback to classify 
 ambiguous section headings. Without it, the pipeline runs, but accuracy in removing paper boilerplate is decreased.
 
-Core dependencies: `pandas`, `pydantic`, `requests`, `playwright`, `plotly`, `openai`, `wiley-tdm`, `mineru[pipeline]`, `torch`
+Core dependencies: `pandas`, `pydantic`, `requests`, `playwright`, `plotly`, `openai`, `wiley-tdm`, `mineru[torch]` (4.x), `torch`
+
+MinerU downloads its models (~2–3 GB, into `~/.mineru/models`) automatically the first time `transform_text()` runs.
+To download them ahead of time, run `mineru-kit models download --tier standard`.
 
 ## Installation
 Install with [uv](https://github.com/astral-sh/uv):

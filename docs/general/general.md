@@ -145,7 +145,7 @@ already exist. No downloading or conversion is performed.
 ```python
 import biomarkit
 publications = biomarkit.load_corpus("my_new_corpus")
-publications = biomarkit.transform_text(publications, mineru_backend="local-cpu")
+publications = biomarkit.transform_text(publications, mineru_tier="standard")
 ```
 
 Unlike `download_corpus()`, publications that have not been downloaded are not included in the returned list. For a
@@ -158,21 +158,35 @@ access to full-texts of some manuscripts (particularly when downloading directly
 
 ## Generate JSON document structures for a corpus.
 Once you have downloaded your full-text manuscripts, you can begin document conversion by generating a JSON document
-structure file for each manuscript. For PDF files, this is done using OCR, with the [MinerU](https://github.com/opendatalab/mineru)
-tool. For XML files, a built-in parser is used. To generate the JSON document structure files for all publications in 
+structure file for each manuscript. PDF files are converted with [MinerU](https://github.com/opendatalab/mineru) 4
+(layout analysis, OCR, formula and table recognition). For XML files, a built-in parser is used. To generate the JSON document structure files for all publications in 
 the active corpus, run the following code:
 
 ```python
 import biomarkit
 biomarkit.load_corpus("my_new_corpus")
 publications = biomarkit.download_corpus()
-publications = biomarkit.transform_text(publications, mineru_backend="local-cpu", generate_report=True)
+publications = biomarkit.transform_text(publications, mineru_tier="standard", generate_report=True)
 ```
 
 This begins the process of generating the intermediate JSON structure files. Depending on the size of your corpus, 
 this may take a long time. All outputs from this function are stored in the `/intermediates` folder. This includes all
-JSON structure files, as well as other useful MinerU output files, such as raw Markdown text, figures in `.png` format,
-and other files useful for developers. For information on the `mineru_backend` parameter, see the documentation [here](general.md#instructions-for-gpu-integration).
+JSON structure files, as well as other useful MinerU output files, such as raw Markdown text, extracted figures, and
+MinerU's intermediate JSON, which are useful for developers. By default these are deleted as each PDF is converted,
+keeping only the JSON structure file and the `images/` folder it links to. Pass `cleanup_intermediates=False` to keep
+everything.
+
+### Choosing a MinerU tier.
+The `mineru_tier` parameter trades speed for quality:
+
+* `"basic"` - small models only (layout, OCR, formulas, tables). The fastest option, and practical without a GPU.
+* `"standard"` (default) - adds the MinerU vision-language model (VLM) for complex layouts. Best run on a GPU.
+* `"advanced"` - spends more VLM compute on difficult documents. Slowest.
+
+MinerU picks the device and the VLM engine itself. See [GPU integration](general.md#gpu-integration) for details.
+
+The first run downloads MinerU's models into `~/.mineru/models`. To download them ahead of time (e.g. before running
+on a machine without internet access), run `mineru-kit models download --tier standard`.
 
 Caching via the `sqlite.db` file is also enabled for this function, meaning that heavy computation does not need to be
 repeated if the pipeline is restarted and manuscript JSON structures have already been generated.
@@ -188,7 +202,7 @@ structured markdown files with:
 import biomarkit
 biomarkit.load_corpus("my_new_corpus")
 publications = biomarkit.download_corpus()
-publications = biomarkit.transform_text(publications, mineru_backend="local-cpu", generate_report=True)
+publications = biomarkit.transform_text(publications, mineru_tier="standard", generate_report=True)
 publications = biomarkit.standardise_text(publications, 
                                           keep_figures=False, 
                                           keep_tables=True, 
@@ -242,9 +256,18 @@ if available:
     print(f"GPU recognised: {torch.cuda.get_device_name(0)} ({torch.cuda.device_count()} device(s))")
 ```
 
-To run `transform_text()` using the GPU set the parameter `mineru_backend="local-gpu"`. Optionally,
-you can also set MINERU_VIRTUAL_VRAM_SIZE in `secrets.env` to optimise performance. To run the function in CPU-only
-mode, set the parameter `mineru_backend="local-cpu"`. 
+MinerU uses the GPU automatically when one is available, both for its small models and for the VLM in the
+`"standard"` and `"advanced"` tiers. By default the VLM runs with llama.cpp, which needs no extra setup. Without a GPU,
+use `mineru_tier="basic"`; the VLM tiers still work on CPU but are very slow.
+
+MinerU's own settings (model folder, model source, VLM engine) live in `~/.mineru/config.yaml`. See the
+[MinerU documentation](https://opendatalab.github.io/MinerU/) for the available options.
+
+### Using a remote VLM server.
+To offload the VLM to another machine, run an OpenAI-compatible server (e.g. vLLM) serving
+`opendatalab/MinerU2.5-Pro-2605-1.2B`, then set `MINERU_VLM_SERVER_URL` (and `MINERU_VLM_API_KEY` if the server needs
+one) in `secrets.env`. The `"standard"` and `"advanced"` tiers then send VLM requests to that server; the small models
+still run locally.
 
 ## Instructions for Ollama integration.
 Access to a GPU enables `biomarkit` to utilise local classifier LLM that can massivley increase the accuracy of 

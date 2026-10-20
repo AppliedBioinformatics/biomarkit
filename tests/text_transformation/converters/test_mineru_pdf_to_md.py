@@ -1,6 +1,11 @@
-﻿from pathlib import Path
+﻿import json
+import sys
+import pytest
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 from biomarkit.text_download.basemodels.publication import Publication
+
+MODULE = "biomarkit.text_transformation.converters.mineru_pdf_to_md"
 
 
 def _make_pub(doi: str, tmp_path: Path) -> Publication:
@@ -11,14 +16,20 @@ def _make_pub(doi: str, tmp_path: Path) -> Publication:
 
 
 def _make_md(converter, pub) -> Path:
-    """Creates the content_list_v2.json file MinerU would produce for pub and returns its path."""
+    """Creates the content_list_v2.json file the worker would produce for pub and returns its path."""
     json_file = converter._build_output_path(pub)
     json_file.parent.mkdir(parents=True, exist_ok=True)
     json_file.touch()
     return json_file
 
 
-FAKE_MINERU = Path("/fake/mineru.exe")
+def _read_job(cmd) -> dict:
+    """The worker job file is the last argument of the worker command."""
+    return json.loads(Path(cmd[-1]).read_text(encoding="utf-8"))
+
+
+def _job_pdf_names(cmd) -> list[str]:
+    return sorted(Path(item["pdf"]).name for item in _read_job(cmd)["items"])
 
 
 # ---------------------------------------------------------------------------
@@ -31,50 +42,48 @@ def test_init_sets_output_dir_to_raw_markdown_dir(active_corpus):
     assert converter.output_dir == active_corpus.json_dir
 
 
-def test_init_defaults_to_local_gpu():
+def test_init_defaults_to_standard_tier():
     from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
     converter = MinerUPdfTransformer(publication_list=[])
-    assert converter.mineru_backend == "local-gpu"
+    assert converter.mineru_tier == "standard"
 
 
-def test_init_rejects_unknown_endpoint():
-    import pytest
+@pytest.mark.parametrize("tier", ["basic", "standard", "advanced"])
+def test_init_accepts_valid_tiers(tier):
     from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
-    with pytest.raises(ValueError, match="Invalid mineru_backend"):
-        MinerUPdfTransformer(publication_list=[], mineru_backend="remote")
+    assert MinerUPdfTransformer(publication_list=[], mineru_tier=tier).mineru_tier == tier
+
+
+@pytest.mark.parametrize("tier", ["flash", "local-gpu", "vllm", ""])
+def test_init_rejects_unknown_tier(tier):
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    with pytest.raises(ValueError, match="Invalid mineru_tier"):
+        MinerUPdfTransformer(publication_list=[], mineru_tier=tier)
+
+
+def test_init_rejects_non_positive_batch_size():
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+    with pytest.raises(ValueError, match="batch_size"):
+        MinerUPdfTransformer(publication_list=[], batch_size=0)
 
 
 # ---------------------------------------------------------------------------
 # _build_output_path
 # ---------------------------------------------------------------------------
 
-def test_build_output_path_uses_mineru_structure(tmp_path):
+@pytest.mark.parametrize("tier", ["basic", "standard", "advanced"])
+def test_build_output_path_uses_auto_subdir_for_every_tier(tmp_path, tier):
     from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
     pub = _make_pub("10.1000/A", tmp_path)
     stem = pub.publication_filepath.stem
-    converter = MinerUPdfTransformer(publication_list=[pub])
+    converter = MinerUPdfTransformer(publication_list=[pub], mineru_tier=tier)
     converter.output_dir = tmp_path
 
-    result = converter._build_output_path(pub)
-
-    assert result == tmp_path / stem / "auto" / f"{stem}_content_list_v2.json"
-
-
-def test_build_output_path_uses_vlm_subdir_for_vllm_endpoint(tmp_path):
-    """The vlm-http-client backend nests output under vlm/, not auto/."""
-    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
-    pub = _make_pub("10.1000/A", tmp_path)
-    stem = pub.publication_filepath.stem
-    converter = MinerUPdfTransformer(publication_list=[pub], mineru_backend="vllm")
-    converter.output_dir = tmp_path
-
-    result = converter._build_output_path(pub)
-
-    assert result == tmp_path / stem / "vlm" / f"{stem}_content_list_v2.json"
+    assert converter._build_output_path(pub) == tmp_path / stem / "auto" / f"{stem}_content_list_v2.json"
 
 
 # ---------------------------------------------------------------------------
-# convert — collects the output of the batched run
+# transform2json — collects the output of the batched run
 # ---------------------------------------------------------------------------
 
 def test_convert_returns_json_path(tmp_path):
@@ -85,9 +94,7 @@ def test_convert_returns_json_path(tmp_path):
     converter.output_dir = tmp_path
     md_file = _make_md(converter, pub)
 
-    result = converter.transform2json(pub)
-
-    assert result == md_file
+    assert converter.transform2json(pub) == md_file
 
 
 def test_convert_returns_none_when_json_missing(tmp_path):
@@ -97,85 +104,90 @@ def test_convert_returns_none_when_json_missing(tmp_path):
     converter = MinerUPdfTransformer(publication_list=[pub])
     converter.output_dir = tmp_path
 
-    result = converter.transform2json(pub)
-
-    assert result is None
+    assert converter.transform2json(pub) is None
 
 
 # ---------------------------------------------------------------------------
-# convert_all — single batched MinerU invocation
+# transform_all — worker invocation
 # ---------------------------------------------------------------------------
 
-def test_convert_all_runs_mineru_once_for_all_pubs(tmp_path):
-    """All PDFs are staged into one directory and converted in a single call."""
-    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer, MINERU_OCR_LANG
+def test_transform_all_runs_one_worker_for_all_pubs(tmp_path):
+    """All PDFs go to a single worker process, read in place, with output dirs matching _build_output_path."""
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pubs = [_make_pub(f"10.1000/{c}", tmp_path) for c in "ABC"]
-    converter = MinerUPdfTransformer(publication_list=pubs)
-    converter.output_dir = tmp_path
+    converter = MinerUPdfTransformer(publication_list=pubs, mineru_tier="basic")
+    converter.output_dir = tmp_path / "intermediates"
 
     captured = {}
 
     def fake_run(cmd, **kwargs):
         captured["cmd"] = cmd
-        staging_dir = Path(cmd[cmd.index("-p") + 1])
-        captured["staged"] = sorted(p.name for p in staging_dir.iterdir())
+        captured["job"] = _read_job(cmd)
         for pub in pubs:
             _make_md(converter, pub)
-        return MagicMock(returncode=0)
+        return MagicMock(returncode=0, stderr="")
 
-    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run) as mock_run, \
+    with patch(f"{MODULE}.subprocess.run", side_effect=fake_run) as mock_run, \
          patch.object(converter, "_cache_result"):
         converter.transform_all()
 
     mock_run.assert_called_once()
-    assert captured["staged"] == sorted(pub.publication_filepath.name for pub in pubs)
-    cmd = captured["cmd"]
-    assert cmd[0] == str(FAKE_MINERU)
-    assert cmd[cmd.index("-o") + 1] == str(tmp_path)
-    assert cmd[cmd.index("-b") + 1] == "pipeline"
-    assert cmd[cmd.index("-l") + 1] == MINERU_OCR_LANG
+    cmd, job = captured["cmd"], captured["job"]
+    assert cmd[:3] == [sys.executable, "-m", "biomarkit.text_transformation.converters.mineru_worker"]
+    assert job["tier"] == "basic"
+    assert job["cleanup"] is True
+    assert [item["pdf"] for item in job["items"]] == [str(p.publication_filepath) for p in pubs]
+    assert [item["out_dir"] for item in job["items"]] == [str(converter._build_output_path(p).parent) for p in pubs]
     assert all(pub.content_json_filepath == converter._build_output_path(pub) for pub in pubs)
 
 
-def test_convert_all_vllm_uses_http_client_backend(tmp_path):
-    """vllm mode passes -b vlm-http-client, points -u at the configured endpoint,
-    exposes the API key as MINERU_VL_API_KEY, and omits the pipeline-only -l flag."""
+def test_transform_all_passes_cleanup_false(tmp_path):
     from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
-    pub = _make_pub("10.1000/R", tmp_path)
-    converter = MinerUPdfTransformer(publication_list=[pub], mineru_backend="vllm")
+    pub = _make_pub("10.1000/K", tmp_path)
+    converter = MinerUPdfTransformer(publication_list=[pub], cleanup=False)
     converter.output_dir = tmp_path
 
     captured = {}
 
     def fake_run(cmd, **kwargs):
-        captured["cmd"] = cmd
-        captured["env"] = kwargs["env"]
-        _make_md(converter, pub)
-        return MagicMock(returncode=0)
+        captured["job"] = _read_job(cmd)
+        return MagicMock(returncode=0, stderr="")
 
-    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.MINERU_VLLM_ENDPOINT", "http://vllm-host:30000"), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.MINERU_API_KEY", "test-key"), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
+    with patch(f"{MODULE}.subprocess.run", side_effect=fake_run), \
          patch.object(converter, "_cache_result"):
         converter.transform_all()
 
-    cmd = captured["cmd"]
-    assert cmd[cmd.index("-b") + 1] == "vlm-http-client"
-    assert cmd[cmd.index("-u") + 1] == "http://vllm-host:30000"
-    assert "-l" not in cmd
-    assert captured["env"]["MINERU_VL_API_KEY"] == "test-key"
-    assert pub.content_json_filepath == converter._build_output_path(pub)
+    assert captured["job"]["cleanup"] is False
 
 
-def test_convert_all_local_does_not_leak_vl_api_key(tmp_path, monkeypatch):
-    """Local mode must not set MINERU_VL_API_KEY even when the secret is configured."""
+def test_transform_all_passes_remote_vlm_settings(tmp_path):
     from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
-    monkeypatch.delenv("MINERU_VL_API_KEY", raising=False)
+    pub = _make_pub("10.1000/R", tmp_path)
+    converter = MinerUPdfTransformer(publication_list=[pub])
+    converter.output_dir = tmp_path
+
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["job"] = _read_job(cmd)
+        return MagicMock(returncode=0, stderr="")
+
+    with patch(f"{MODULE}.MINERU_VLM_SERVER_URL", "http://vlm-host:30000"), \
+         patch(f"{MODULE}.MINERU_VLM_API_KEY", "test-key"), \
+         patch(f"{MODULE}.subprocess.run", side_effect=fake_run), \
+         patch.object(converter, "_cache_result"):
+        converter.transform_all()
+
+    assert captured["job"]["server_url"] == "http://vlm-host:30000"
+    assert captured["job"]["api_key"] == "test-key"
+
+
+def test_transform_all_local_vlm_sends_blank_server_settings(tmp_path):
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+
     pub = _make_pub("10.1000/L", tmp_path)
     converter = MinerUPdfTransformer(publication_list=[pub])
     converter.output_dir = tmp_path
@@ -183,32 +195,105 @@ def test_convert_all_local_does_not_leak_vl_api_key(tmp_path, monkeypatch):
     captured = {}
 
     def fake_run(cmd, **kwargs):
-        captured["env"] = kwargs["env"]
-        return MagicMock(returncode=0)
+        captured["job"] = _read_job(cmd)
+        return MagicMock(returncode=0, stderr="")
 
-    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.MINERU_API_KEY", "test-key"), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
+    with patch(f"{MODULE}.MINERU_VLM_SERVER_URL", None), \
+         patch(f"{MODULE}.MINERU_VLM_API_KEY", None), \
+         patch(f"{MODULE}.subprocess.run", side_effect=fake_run), \
+         patch.object(converter, "_cache_result"):
+        converter.transform_all()
+
+    assert captured["job"]["server_url"] == ""
+    assert captured["job"]["api_key"] == ""
+
+
+def test_transform_all_strips_legacy_mineru_env(tmp_path, monkeypatch):
+    """MinerU 4 rejects a conflicting MINERU_VL_API_KEY, so legacy 3.x variables never reach the worker."""
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+
+    monkeypatch.setenv("MINERU_VL_API_KEY", "old-key")
+    monkeypatch.setenv("MINERU_VIRTUAL_VRAM_SIZE", "16")
+    monkeypatch.setenv("SOME_OTHER_VAR", "kept")
+    pub = _make_pub("10.1000/E", tmp_path)
+    converter = MinerUPdfTransformer(publication_list=[pub])
+    converter.output_dir = tmp_path
+
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["env"] = kwargs["env"]
+        return MagicMock(returncode=0, stderr="")
+
+    with patch(f"{MODULE}.subprocess.run", side_effect=fake_run), \
          patch.object(converter, "_cache_result"):
         converter.transform_all()
 
     assert "MINERU_VL_API_KEY" not in captured["env"]
+    assert "MINERU_VIRTUAL_VRAM_SIZE" not in captured["env"]
+    assert captured["env"]["SOME_OTHER_VAR"] == "kept"
 
 
-def test_convert_all_skips_batch_for_empty_list():
+def test_transform_all_logs_per_pdf_failures_from_results(tmp_path, caplog):
     from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
-    converter = MinerUPdfTransformer(publication_list=[])
+    ok_pub, bad_pub = _make_pub("10.1000/OK", tmp_path), _make_pub("10.1000/BAD", tmp_path)
+    converter = MinerUPdfTransformer(publication_list=[ok_pub, bad_pub])
+    converter.output_dir = tmp_path
 
-    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run") as mock_run:
+    def fake_run(cmd, **kwargs):
+        _make_md(converter, ok_pub)
+        Path(_read_job(cmd)["results"]).write_text(json.dumps([
+            {"pdf": str(ok_pub.publication_filepath), "ok": True, "error": None},
+            {"pdf": str(bad_pub.publication_filepath), "ok": False, "error": "ValueError: broken pdf"},
+        ]), encoding="utf-8")
+        return MagicMock(returncode=0, stderr="")
+
+    with caplog.at_level("WARNING"), \
+         patch(f"{MODULE}.subprocess.run", side_effect=fake_run), \
+         patch.object(converter, "_cache_result") as mock_cache:
         converter.transform_all()
+
+    assert "ValueError: broken pdf" in caplog.text
+    assert ok_pub.content_json_filepath == converter._build_output_path(ok_pub)
+    assert bad_pub.content_json_filepath is None
+    mock_cache.assert_called_once_with(ok_pub)
+
+
+def test_transform_all_worker_crash_still_collects_outputs(tmp_path, caplog):
+    """A crashed worker (non-zero exit, results partially or never written) is not fatal."""
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+
+    ok_pub, bad_pub = _make_pub("10.1000/OK", tmp_path), _make_pub("10.1000/BAD", tmp_path)
+    converter = MinerUPdfTransformer(publication_list=[ok_pub, bad_pub])
+    converter.output_dir = tmp_path
+
+    def fake_run(cmd, **kwargs):
+        _make_md(converter, ok_pub)
+        return MagicMock(returncode=3221225477, stderr="Windows fatal exception: access violation")
+
+    with caplog.at_level("WARNING"), \
+         patch(f"{MODULE}.subprocess.run", side_effect=fake_run), \
+         patch.object(converter, "_cache_result") as mock_cache:
+        converter.transform_all()
+
+    assert "access violation" in caplog.text
+    assert ok_pub.content_json_filepath == converter._build_output_path(ok_pub)
+    assert bad_pub.content_json_filepath is None
+    mock_cache.assert_called_once_with(ok_pub)
+
+
+def test_transform_all_skips_worker_for_empty_list():
+    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
+
+    with patch(f"{MODULE}.subprocess.run") as mock_run:
+        MinerUPdfTransformer(publication_list=[]).transform_all()
 
     mock_run.assert_not_called()
 
 
-def test_convert_all_does_not_restage_existing_outputs(tmp_path):
-    """Pubs whose .md is already on disk are cached without being reconverted."""
+def test_transform_all_does_not_resend_existing_outputs(tmp_path):
+    """Pubs whose JSON is already on disk are cached without being reconverted."""
     from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     done_pub = _make_pub("10.1000/DONE", tmp_path)
@@ -220,24 +305,21 @@ def test_convert_all_does_not_restage_existing_outputs(tmp_path):
     captured = {}
 
     def fake_run(cmd, **kwargs):
-        staging_dir = Path(cmd[cmd.index("-p") + 1])
-        captured["staged"] = sorted(p.name for p in staging_dir.iterdir())
+        captured["pdfs"] = _job_pdf_names(cmd)
         _make_md(converter, new_pub)
-        return MagicMock(returncode=0)
+        return MagicMock(returncode=0, stderr="")
 
-    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
+    with patch(f"{MODULE}.subprocess.run", side_effect=fake_run), \
          patch.object(converter, "_cache_result") as mock_cache:
         converter.transform_all()
 
-    assert captured["staged"] == [new_pub.publication_filepath.name]
+    assert captured["pdfs"] == [new_pub.publication_filepath.name]
     assert done_pub.content_json_filepath == converter._build_output_path(done_pub)
     assert new_pub.content_json_filepath == converter._build_output_path(new_pub)
     assert mock_cache.call_count == 2
 
 
-def test_convert_all_skips_batch_when_all_outputs_exist(tmp_path):
-    """If every pub already has output on disk, no MinerU subprocess is spawned."""
+def test_transform_all_skips_worker_when_all_outputs_exist(tmp_path):
     from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pubs = [_make_pub(f"10.1000/{c}", tmp_path) for c in "AB"]
@@ -246,8 +328,7 @@ def test_convert_all_skips_batch_when_all_outputs_exist(tmp_path):
     for pub in pubs:
         _make_md(converter, pub)
 
-    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run") as mock_run, \
+    with patch(f"{MODULE}.subprocess.run") as mock_run, \
          patch.object(converter, "_cache_result") as mock_cache:
         converter.transform_all()
 
@@ -256,84 +337,14 @@ def test_convert_all_skips_batch_when_all_outputs_exist(tmp_path):
     assert mock_cache.call_count == 2
 
 
-def test_convert_all_nonzero_exit_still_collects_outputs(tmp_path):
-    """A failed batch is not fatal — publications whose .md exists are still cached."""
-    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
-
-    ok_pub = _make_pub("10.1000/OK", tmp_path)
-    bad_pub = _make_pub("10.1000/BAD", tmp_path)
-    converter = MinerUPdfTransformer(publication_list=[ok_pub, bad_pub])
-    converter.output_dir = tmp_path
-
-    def fake_run(cmd, **kwargs):
-        _make_md(converter, ok_pub)
-        return MagicMock(returncode=1, stderr="one task failed")
-
-    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
-         patch.object(converter, "_cache_result") as mock_cache:
-        converter.transform_all()
-
-    assert ok_pub.content_json_filepath == converter._build_output_path(ok_pub)
-    assert bad_pub.content_json_filepath is None
-    mock_cache.assert_called_once_with(ok_pub)
-
-
-def test_convert_all_passes_vram_override_when_set(tmp_path):
-    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
-
-    pub = _make_pub("10.1000/V", tmp_path)
-    converter = MinerUPdfTransformer(publication_list=[pub])
-    converter.output_dir = tmp_path
-
-    captured = {}
-
-    def fake_run(cmd, **kwargs):
-        captured["env"] = kwargs["env"]
-        return MagicMock(returncode=0)
-
-    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.MINERU_VIRTUAL_VRAM_SIZE", "16"), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
-         patch.object(converter, "_cache_result"):
-        converter.transform_all()
-
-    assert captured["env"]["MINERU_VIRTUAL_VRAM_SIZE"] == "16"
-
-
-def test_convert_all_strips_blank_vram_override(tmp_path, monkeypatch):
-    """A blank value in secrets.env must not reach the MinerU subprocess."""
-    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
-
-    monkeypatch.setenv("MINERU_VIRTUAL_VRAM_SIZE", "")
-    pub = _make_pub("10.1000/W", tmp_path)
-    converter = MinerUPdfTransformer(publication_list=[pub])
-    converter.output_dir = tmp_path
-
-    captured = {}
-
-    def fake_run(cmd, **kwargs):
-        captured["env"] = kwargs["env"]
-        return MagicMock(returncode=0)
-
-    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.MINERU_VIRTUAL_VRAM_SIZE", ""), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
-         patch.object(converter, "_cache_result"):
-        converter.transform_all()
-
-    assert "MINERU_VIRTUAL_VRAM_SIZE" not in captured["env"]
-
-
-def test_convert_all_uses_base_class(tmp_path):
+def test_transform_all_uses_base_class(tmp_path):
     """transform_all() uses the base class iteration (calls transform2json per pub)."""
     from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
     pubs = [_make_pub("10.1000/X", tmp_path)]
     converter = MinerUPdfTransformer(publication_list=pubs)
 
-    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", return_value=MagicMock(returncode=0)), \
+    with patch(f"{MODULE}.subprocess.run", return_value=MagicMock(returncode=0, stderr="")), \
          patch.object(converter, "transform2json", return_value=None) as mock_transform, \
          patch.object(converter, "_cache_result"):
         converter.transform_all()
@@ -341,187 +352,60 @@ def test_convert_all_uses_base_class(tmp_path):
     mock_transform.assert_called_once_with(pubs[0])
 
 
-def test_convert_all_checks_mineru_once(tmp_path):
-    """transform_all() calls check_mineru exactly once regardless of publication count."""
+# ---------------------------------------------------------------------------
+# Batching
+# ---------------------------------------------------------------------------
+
+def _run_batched(tmp_path, n_pubs, batch_size, pre_done=0):
+    """Runs transform_all with a fake worker; returns (pubs, PDF names per worker call)."""
     from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
 
-    pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(3)]
-    converter = MinerUPdfTransformer(publication_list=pubs)
-
-    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU) as mock_check, \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", return_value=MagicMock(returncode=0)), \
-         patch.object(converter, "transform2json", return_value=None), \
-         patch.object(converter, "_cache_result"):
-        converter.transform_all()
-
-    mock_check.assert_called_once()
-
-def test_batching_splits_into_correct_number_of_calls(tmp_path):
-    """7 pubs with batch_size=3 → 3 MinerU calls (chunks of 3, 3, 1)."""
-    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
-
-    pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(7)]
-    converter = MinerUPdfTransformer(publication_list=pubs, batch_size=3)
+    pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(n_pubs)]
+    converter = MinerUPdfTransformer(publication_list=pubs, batch_size=batch_size)
     converter.output_dir = tmp_path
+    for pub in pubs[:pre_done]:
+        _make_md(converter, pub)
 
-    staged_per_call = []
+    calls = []
 
     def fake_run(cmd, **kwargs):
-        staging_dir = Path(cmd[cmd.index("-p") + 1])
-        staged_per_call.append(sorted(p.name for p in staging_dir.iterdir()))
+        calls.append(_job_pdf_names(cmd))
         for pub in pubs:
             _make_md(converter, pub)
-        return MagicMock(returncode=0)
+        return MagicMock(returncode=0, stderr="")
 
-    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run) as mock_run, \
+    with patch(f"{MODULE}.subprocess.run", side_effect=fake_run), \
          patch.object(converter, "_cache_result"):
         converter.transform_all()
+    return pubs, calls
 
-    assert mock_run.call_count == 3
-    assert len(staged_per_call[0]) == 3
-    assert len(staged_per_call[1]) == 3
-    assert len(staged_per_call[2]) == 1
+
+def test_batching_splits_into_correct_number_of_calls(tmp_path):
+    """7 pubs with batch_size=3 → 3 worker calls (chunks of 3, 3, 1)."""
+    _, calls = _run_batched(tmp_path, 7, 3)
+    assert [len(c) for c in calls] == [3, 3, 1]
 
 
 def test_batching_covers_all_pubs(tmp_path):
-    """Every publication ends up staged across the chunks with no duplicates or omissions."""
-    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
-
-    pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(5)]
-    converter = MinerUPdfTransformer(publication_list=pubs, batch_size=2)
-    converter.output_dir = tmp_path
-
-    all_staged = []
-
-    def fake_run(cmd, **kwargs):
-        staging_dir = Path(cmd[cmd.index("-p") + 1])
-        all_staged.extend(p.name for p in staging_dir.iterdir())
-        for pub in pubs:
-            _make_md(converter, pub)
-        return MagicMock(returncode=0)
-
-    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
-         patch.object(converter, "_cache_result"):
-        converter.transform_all()
-
-    expected = sorted(pub.publication_filepath.name for pub in pubs)
-    assert sorted(all_staged) == expected
+    """Every publication is sent exactly once across the chunks."""
+    pubs, calls = _run_batched(tmp_path, 5, 2)
+    assert sorted(name for c in calls for name in c) == sorted(p.publication_filepath.name for p in pubs)
 
 
 def test_batching_is_sequential_not_parallel(tmp_path):
-    """Chunks run one at a time — the second call only starts after the first returns."""
-    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
-
-    pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(4)]
-    converter = MinerUPdfTransformer(publication_list=pubs, batch_size=2)
-    converter.output_dir = tmp_path
-
-    call_order = []
-
-    def fake_run(cmd, **kwargs):
-        staging_dir = Path(cmd[cmd.index("-p") + 1])
-        call_order.append(sorted(p.name for p in staging_dir.iterdir()))
-        for pub in pubs:
-            _make_md(converter, pub)
-        return MagicMock(returncode=0)
-
-    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
-         patch.object(converter, "_cache_result"):
-        converter.transform_all()
-
-    # Two distinct calls recorded in order, not simultaneously.
-    assert len(call_order) == 2
-    assert call_order[0] != call_order[1]
+    _, calls = _run_batched(tmp_path, 4, 2)
+    assert len(calls) == 2
+    assert calls[0] != calls[1]
 
 
-def test_none_batch_size_sends_all_in_one_call(tmp_path):
-    """batch_size=None bypasses chunking and sends all pending PDFs in one MinerU call."""
-    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
-
-    pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(5)]
-    converter = MinerUPdfTransformer(publication_list=pubs, batch_size=None)
-    converter.output_dir = tmp_path
-
-    def fake_run(cmd, **kwargs):
-        for pub in pubs:
-            _make_md(converter, pub)
-        return MagicMock(returncode=0)
-
-    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run) as mock_run, \
-         patch.object(converter, "_cache_result"):
-        converter.transform_all()
-
-    mock_run.assert_called_once()
-
-
-def test_batch_size_equal_to_pub_count_sends_one_call(tmp_path):
-    """When batch_size == len(pubs) the behaviour is identical to a single unbatched call."""
-    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
-
-    pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(3)]
-    converter = MinerUPdfTransformer(publication_list=pubs, batch_size=3)
-    converter.output_dir = tmp_path
-
-    def fake_run(cmd, **kwargs):
-        for pub in pubs:
-            _make_md(converter, pub)
-        return MagicMock(returncode=0)
-
-    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run) as mock_run, \
-         patch.object(converter, "_cache_result"):
-        converter.transform_all()
-
-    mock_run.assert_called_once()
-
-
-def test_batch_size_larger_than_pub_count_sends_one_call(tmp_path):
-    """batch_size larger than the list still results in a single MinerU call."""
-    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
-
-    pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(2)]
-    converter = MinerUPdfTransformer(publication_list=pubs, batch_size=100)
-    converter.output_dir = tmp_path
-
-    def fake_run(cmd, **kwargs):
-        for pub in pubs:
-            _make_md(converter, pub)
-        return MagicMock(returncode=0)
-
-    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run) as mock_run, \
-         patch.object(converter, "_cache_result"):
-        converter.transform_all()
-
-    mock_run.assert_called_once()
+@pytest.mark.parametrize("batch_size", [None, 3, 100])
+def test_batch_size_at_or_above_pub_count_sends_one_call(tmp_path, batch_size):
+    _, calls = _run_batched(tmp_path, 3, batch_size)
+    assert len(calls) == 1
 
 
 def test_already_converted_pubs_excluded_from_batching(tmp_path):
-    """Pubs with existing output on disk are not re-staged in any chunk."""
-    from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
-
-    done_pub = _make_pub("10.1000/DONE", tmp_path)
-    new_pubs = [_make_pub(f"10.1000/{i}", tmp_path) for i in range(4)]
-    converter = MinerUPdfTransformer(publication_list=[done_pub] + new_pubs, batch_size=2)
-    converter.output_dir = tmp_path
-    _make_md(converter, done_pub)
-
-    all_staged = []
-
-    def fake_run(cmd, **kwargs):
-        staging_dir = Path(cmd[cmd.index("-p") + 1])
-        all_staged.extend(p.name for p in staging_dir.iterdir())
-        for pub in new_pubs:
-            _make_md(converter, pub)
-        return MagicMock(returncode=0)
-
-    with patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.check_mineru", return_value=FAKE_MINERU), \
-         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.subprocess.run", side_effect=fake_run), \
-         patch.object(converter, "_cache_result"):
-        converter.transform_all()
-
-    assert done_pub.publication_filepath.name not in all_staged
+    pubs, calls = _run_batched(tmp_path, 5, 2, pre_done=1)
+    sent = [name for c in calls for name in c]
+    assert pubs[0].publication_filepath.name not in sent
+    assert len(sent) == 4

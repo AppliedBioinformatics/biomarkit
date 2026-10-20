@@ -1067,7 +1067,7 @@ class ElsevierXmlTransformer(Transformer):
     def transform2json(self, pub: Publication) -> Path | None:
         """
         Parses a single Elsevier XML file and writes a content_list_v2.json to
-        RAW_MARKDOWN_DIR/<stem>/auto/<stem>_content_list_v2.json.
+        <corpus>/intermediates/<stem>/auto/<stem>_content_list_v2.json.
 
         Parameters
         ----------

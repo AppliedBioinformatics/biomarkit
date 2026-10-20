@@ -88,16 +88,15 @@ ELSEVIER_API_KEY = getenv("ELSEVIER_API_KEY")
 LLM_BASE_URL = getenv("LLM_BASE_URL", "http://localhost:11434/v1")
 LLM_MODEL_NAME = getenv("LLM_MODEL_NAME", "gemma3:12b")
 
-# MinerU settings (optional). Integer GB of GPU VRAM MinerU is allowed to budget for;
-# overrides its auto-detection and raises inference batch sizes on larger GPUs.
-# Set via secrets.env only if you know what you are doing; unset means auto-detect.
-MINERU_VIRTUAL_VRAM_SIZE = getenv("MINERU_VIRTUAL_VRAM_SIZE")
+# MinerU parsing tiers accepted by transform_text(mineru_tier=...). "basic" uses small models only;
+# "standard" and "advanced" also run the MinerU VLM.
+MINERU_TIER_CHOICES = ("basic", "standard", "advanced")
 
-# MinerU remote inference (optional). Both must be set in secrets.env when
-# transform_text(mineru_endpoint="vllm") is used: the URL of a vLLM server hosting
-# the MinerU VLM model, and the API key the server was started with.
-MINERU_VLLM_ENDPOINT = getenv("MINERU_VLLM_ENDPOINT")
-MINERU_API_KEY = getenv("MINERU_API_KEY")
+# MinerU remote VLM (optional). When MINERU_VLM_SERVER_URL is set in secrets.env, the VLM tiers send
+# inference to this OpenAI-compatible server (e.g. vLLM serving MinerU2.5-Pro-2605-1.2B) instead of
+# running the VLM locally. The API key is only needed if the server was started with one.
+MINERU_VLM_SERVER_URL = getenv("MINERU_VLM_SERVER_URL")
+MINERU_VLM_API_KEY = getenv("MINERU_VLM_API_KEY")
 
 # Program settings (don't touch these unless you know what you are doing).
 MAX_THREADS = 10

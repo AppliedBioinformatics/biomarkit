@@ -103,6 +103,24 @@ def test_paragraph_with_inline_equation():
     assert r"$\alpha$" in result
 
 
+def test_paragraph_with_mineru4_hyperlink_and_code_spans_parsed_and_rendered_as_text():
+    from biomarkit.standardisation.content_list.schema import _parse_block
+    # Raw MinerU 4 V2 spans, including extra fields (style, url, children) the schema should tolerate.
+    block = _parse_block({
+        "type": "paragraph",
+        "content": {"paragraph_content": [
+            {"type": "text", "content": "Licensed under ", "style": ["italic"]},
+            {"type": "hyperlink", "content": "CC BY 4.0", "url": "https://creativecommons.org/licenses/by/4.0/"},
+            {"type": "text", "content": "; run "},
+            {"type": "code_inline", "content": "pip install x"},
+            {"type": "hyperlink", "content": "a link", "url": "https://x.org",
+             "children": [{"type": "text", "content": "a "}, {"type": "text", "content": "link"}]},
+        ]},
+        "bbox": [0, 0, 1, 1],
+    })
+    assert render([block]) == "Licensed under CC BY 4.0; run pip install xa link"
+
+
 def test_empty_paragraph_skipped():
     result = render([make_paragraph("   ")])
     assert result == ""

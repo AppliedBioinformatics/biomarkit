@@ -190,7 +190,7 @@ def download_corpus(check_opensource: bool = True, generate_report: bool = False
 
 def transform_text(
     publications: list[Publication],
-    mineru_backend: str = "local-gpu",
+    mineru_tier: str = "standard",
     mineru_batch_size: int | None = None,
     generate_report: bool = False,
     cleanup_intermediates: bool = True,
@@ -208,14 +208,14 @@ def transform_text(
     publications : list[Publication]
         Output of download_corpus(). Publications without a local file
         (publication_filepath is None) are silently skipped.
-    mineru_backend : {"local-gpu", "local-cpu", "vllm"}, default "local-gpu"
-        "local-gpu" runs MinerU on the local CUDA GPU (requires PyTorch + CUDA).
-        "local-cpu" runs MinerU on CPU only — slower but no GPU required.
-        "vllm" delegates PDF inference to the remote vLLM server configured via
-        MINERU_VLLM_ENDPOINT and MINERU_API_KEY in secrets.env (both are validated
-        before the run starts).
-    mineru_batch_size : int | None, default None (inherits MinerUPdfTransformer default of 25)
-        Number of PDFs to send to MinerU per invocation. None sends all pending
+    mineru_tier : {"basic", "standard", "advanced"}, default "standard"
+        MinerU 4 parsing tier. "basic" uses small models only (OCR, layout, formulas,
+        tables) and runs acceptably on CPU. "standard" adds the MinerU VLM for complex
+        layouts and is best run on a GPU. "advanced" spends more VLM compute on hard
+        documents. MinerU picks the device and VLM engine itself. If MINERU_VLM_SERVER_URL
+        is set in secrets.env, VLM inference is sent to that remote server instead.
+    mineru_batch_size : int | None, default None
+        Number of PDFs per MinerU worker process (models load once per batch). None sends all pending
         PDFs in a single call. Set a positive integer to process in sequential
         chunks — each completed chunk is cached before the next begins.
     cleanup_intermediates : bool, default True
@@ -237,8 +237,8 @@ def transform_text(
     from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
     from biomarkit.text_transformation.visualisation.conversion_report import build_conversion_report
 
-    # Pre-transformation checks (affirms vLLM secrets are filled when mineru_backend="vllm").
-    prepare_bulk_transformation(mineru_backend=mineru_backend)
+    # Pre-transformation checks (tier, MinerU version, remote VLM settings, GPU availability).
+    prepare_bulk_transformation(mineru_tier=mineru_tier)
 
     # Send publications to text transformation controller to categorize them for processing based on cached state.
     controller = Controller(publication_list=publications)
@@ -253,7 +253,7 @@ def transform_text(
     ElsevierXmlTransformer(publication_list=xmls_to_process).transform_all()
     MinerUPdfTransformer(
         publication_list=pdfs_to_process,
-        mineru_backend=mineru_backend,
+        mineru_tier=mineru_tier,
         batch_size=mineru_batch_size,
     ).transform_all()
 
@@ -356,14 +356,16 @@ def standardise_text(
 
 
 if __name__ == "__main__":
-    # Usage: uv run python -m biomarkit.pipeline <corpus name or path>
+    # Usage: uv run python -m biomarkit.pipeline [corpus name or path]
     import sys
     from biomarkit.text_download.utils.generics import setup_logging
+
+    corpus = r"C:\Users\jackb\OneDrive\Documents\GitHub\biomarkit\biomarkit\corpora\barley_water_logging"
 
     # Setup.
     setup_logging(level=logging.INFO)
     logging.info("Complete a full new corpus conversion.")
-    load_corpus(sys.argv[1], build=False)
+    load_corpus(corpus, build=False)
 
     # Download.
     publications = download_corpus(check_opensource=True, generate_report=True)
@@ -371,7 +373,7 @@ if __name__ == "__main__":
 
     # Convert.
     publications = transform_text(publications,
-                                  mineru_backend="local-gpu",
+                                  mineru_tier="standard",
                                   mineru_batch_size=25,
                                   cleanup_intermediates=True)
 
