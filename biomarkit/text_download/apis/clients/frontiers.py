@@ -42,13 +42,16 @@ class FrontiersClient(PlaywrightPublisherApi):
         download_url = self._get_pdf_url(doi=doi)
         filepath = self._build_download_filepath()
 
-        if not download_url:
-            self.logger.info(f"No open access URL found for DOI: {doi}.")
-            self.logger.info("Attempting fallback method with generalised url.")
-            success = self.attempt_fallback(doi=doi, filepath=filepath)
-        else:
+        success = False
+        if download_url:
             self.logger.info(f"Open access URL found for DOI: {doi}. Attempting to download...")
             success = self._attempt_download(doi=doi, url=download_url, filepath=filepath)
+        else:
+            self.logger.info(f"No open access PDF URL found for DOI: {doi}.")
+
+        if not success:
+            self.logger.info("Attempting fallback method with generalised url.")
+            success = self.attempt_fallback(doi=doi, filepath=filepath)
 
         if not success:
             return None
