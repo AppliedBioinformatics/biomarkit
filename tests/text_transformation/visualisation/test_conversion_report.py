@@ -193,23 +193,21 @@ def test_build_conversion_report_creates_html_file(tmp_path):
     pub_failed = _make_pub("10.1000/L", tmp_path)
 
     out_file = tmp_path / "report.html"
-    with patch("biomarkit.text_transformation.visualisation.conversion_report.REPORT_DIR", tmp_path):
-        build_conversion_report(
-            newly_converted=[pub_converted, pub_failed],
-            pre_cached=[],
-            out_file=out_file,
-        )
+    build_conversion_report(
+        newly_converted=[pub_converted, pub_failed],
+        pre_cached=[],
+        out_file=out_file,
+    )
 
     assert out_file.exists()
     content = out_file.read_text()
     assert "<html" in content
 
 
-def test_build_conversion_report_default_filename(tmp_path):
+def test_build_conversion_report_default_filename(active_corpus):
     from biomarkit.text_transformation.visualisation.conversion_report import build_conversion_report
 
-    with patch("biomarkit.text_transformation.visualisation.conversion_report.REPORT_DIR", tmp_path):
-        build_conversion_report(newly_converted=[], pre_cached=[])
+    build_conversion_report(newly_converted=[], pre_cached=[])
 
-    html_files = list(tmp_path.glob("conversion_report_*.html"))
+    html_files = list(active_corpus.report_dir.glob("conversion_report_*.html"))
     assert len(html_files) == 1

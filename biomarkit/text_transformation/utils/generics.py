@@ -2,7 +2,7 @@
 import shutil
 import sqlite3
 from pathlib import Path
-from biomarkit.config import JSON_STRUCT_DIR, FINAL_MARKDOWN_DIR, BASE_DIR, DB_CACHE_FILE_NAME
+from biomarkit.config import BASE_DIR, get_corpus
 
 MINERU_BACKEND_CHOICES = ("local-gpu", "local-cpu", "vllm")
 
@@ -76,9 +76,9 @@ def check_vllm_config() -> None:
 
 def check_transformation_filepaths() -> None:
     """
-    Checks that RAW_MARKDOWN_DIR and FINAL_MARKDOWN_DIR exist, creating them if not.
+    Checks that the active corpus's intermediates and results folders exist, creating them if not.
     """
-    for directory in (JSON_STRUCT_DIR, FINAL_MARKDOWN_DIR):
+    for directory in (get_corpus().json_dir, get_corpus().final_md_dir):
         if not directory.exists():
             logging.info(f"SETUP - Directory not found, creating: {directory}")
             directory.mkdir(parents=True, exist_ok=True)
@@ -135,7 +135,7 @@ def check_cache_for_markdowns() -> None:
     """
     Checks the cache to see if any publications have already been processed. Controller will handle splitting of
     files this function just checks whether any are present and updates the log."""
-    with sqlite3.connect(DB_CACHE_FILE_NAME) as conn:
+    with sqlite3.connect(get_corpus().db) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM cache")
         total = cursor.fetchone()[0]

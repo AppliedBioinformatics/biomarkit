@@ -37,22 +37,26 @@ select all results:
 ![1.png](../statics/1.png)
 4) Next to the select-all button, click "Export", then select "CSV", then tick the boxes as shown below:
 ![2.png](../statics/2.png)
-5) Wait for your export to complete (may take some time for large queries), once downloaded, rename the CSV file to 
-`scopus.csv`.
+5) Wait for your export to complete (may take some time for large queries).
 6) In Python, run the function below to generate a new `biomarkit` corpus: 
 
 ```python
 import biomarkit
-biomarkit.build_new_corpus(name="my_new_corpus", scopus_file="/path/to/my/scopus.csv", set_active=True)
+biomarkit.load_corpus("my_new_corpus", scopus_file="/path/to/my/scopus_export.csv")
 ```
 
-The function will automatically generate the following folder structure. By default, new corpora will be built inside the
-`corpora/` folder at the current working directory. A copy of `scopus.csv` will be created inside the new corpus 
-folder. 
+If the corpus doesn't exist yet, `load_corpus()` asks whether to build it:
+```
+Corpus not found at /path/to/corpora/my_new_corpus. Build a new corpus there? [y/N]
+```
+Answering `y` generates the folder structure below and copies your Scopus export into it as `scopus.csv`. A corpus can
+be given by name, in which case it is built inside the `corpora/` folder of your workspace directory, or as a full
+folder path (e.g. `load_corpus("/data/corpora/my_new_corpus", ...)`).
+
 ```
 ./corpora/
 └── <my_new_corpus>/
-    ├── scopus.csv       # Scopus query export (input — you need to place this here)
+    ├── scopus.csv       # Scopus query export (input — copied in from scopus_file)
     ├── manuscripts/     # Downloaded full-text PDFs/XMLs  output of `download_corpus()`
     ├── intermediates/   # Intermediate MinerU output files and JSON structures - output of `transform_text()`
     ├── results/         # Final Markdown files - output of `standardise_text()`
@@ -61,9 +65,32 @@ folder.
     └── sqlite.db        # SQLite cache for this corpus
 ```
 
-### Switching between corpora.
-You may want to switch between different corpora when running the software. You can switch the "active" corpus by
-updating the CORPUS_NAME variable in `secrets.env` to the name of the corpus you wish to set inside `./corpora`.
+### Running in batch jobs.
+The build prompt only appears when Python is running interactively (a terminal or a Jupyter notebook). In
+non-interactive runs, such as HPC batch jobs, cron or piped scripts, a missing corpus raises an error instead. Pass
+`build=True` to build without asking, or `build=False` to never build:
+
+```python
+biomarkit.load_corpus("my_new_corpus", scopus_file="/path/to/scopus_export.csv", build=True)
+```
+
+### Selecting and switching between corpora.
+`load_corpus()` also sets the "active" corpus for the rest of the Python session. `download_corpus()`,
+`transform_text()` and `standardise_text()` all read from and write to the active corpus, so every script should start
+with a call to `load_corpus()`. Calling a pipeline function before then raises an error. To switch to another corpus,
+call `load_corpus()` again with a different name or path:
+
+```python
+import biomarkit
+biomarkit.load_corpus("corpus_a")
+biomarkit.download_corpus()
+
+biomarkit.load_corpus("corpus_b")   # everything from here on uses corpus_b
+biomarkit.download_corpus()
+```
+
+`load_corpus()` also returns a `Publication` object for each manuscript that has already been downloaded (see
+[below](#loading-a-previously-downloaded-corpus-with-load_corpus)).
 
 ## Attempt download of all full-texts for your corpus.
 Once your corpus is set up, download is handled automatically, and once a manuscript is downloaded successfully, it is 
@@ -73,6 +100,7 @@ called again or restarted.
 To begin downloading full-text files for a corpus, run the following command: 
 ```python
 import biomarkit
+biomarkit.load_corpus("my_new_corpus")
 publications = biomarkit.download_corpus(check_opensource=True, generate_report=True)
 ```
 
@@ -93,6 +121,7 @@ by the function. For example:
 
 ```python
 import biomarkit
+biomarkit.load_corpus("my_new_corpus")
 publications = biomarkit.download_corpus()
 
 # Get the abstract, title and DOI for each publication.
@@ -105,6 +134,22 @@ for publication in publications:
 for publication in publications:
     print(publication.publication_filepath)
 ```
+
+### Loading a previously downloaded corpus with load_corpus().
+If you have already run `download_corpus()` and want to get the `Publication` objects back without starting another
+download run, use the list returned by `load_corpus()`. It reads the corpus cache (sqlite.db) and returns one
+`Publication` object for each successfully downloaded manuscript. Metadata comes from `scopus.csv`, and the
+`publication_filepath`, `content_json_filepath` and `final_md_filepath` fields are filled in wherever those files
+already exist. No downloading or conversion is performed.
+
+```python
+import biomarkit
+publications = biomarkit.load_corpus("my_new_corpus")
+publications = biomarkit.transform_text(publications, mineru_backend="local-cpu")
+```
+
+Unlike `download_corpus()`, publications that have not been downloaded are not included in the returned list. For a
+newly built corpus the list is empty.
 
 ### A Suggestion for maximising download performance.
 For downloading full-text manuscripts, we recommend running the software from an institutional IP (if applicable). This 
@@ -119,6 +164,7 @@ the active corpus, run the following code:
 
 ```python
 import biomarkit
+biomarkit.load_corpus("my_new_corpus")
 publications = biomarkit.download_corpus()
 publications = biomarkit.transform_text(publications, mineru_backend="local-cpu", generate_report=True)
 ```
@@ -140,6 +186,7 @@ structured markdown files with:
 
 ```python
 import biomarkit
+biomarkit.load_corpus("my_new_corpus")
 publications = biomarkit.download_corpus()
 publications = biomarkit.transform_text(publications, mineru_backend="local-cpu", generate_report=True)
 publications = biomarkit.standardise_text(publications, 

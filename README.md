@@ -35,8 +35,8 @@ The "force_imrad_structure" parameter will force each output Markdown file to co
 ```python
 import biomarkit
 
-# Make a new corpus and set it as active (writes CORPUS_NAME to secrets.env)
-biomarkit.build_new_corpus(name="my_corpus", scopus_file="path/to/scopus.csv", set_active=True)
+# Select the corpus for this session (asks to build it from the Scopus export if it doesn't exist yet):
+biomarkit.load_corpus("my_corpus", scopus_file="path/to/scopus.csv")
 
 # Attempt download for all DOIs:
 publications = biomarkit.download_corpus(check_opensource=True, generate_report=True)
@@ -55,6 +55,7 @@ Python workflows. For example, storing each publication as a Python object makes
 ```python
 import biomarkit
 
+biomarkit.load_corpus("my_corpus")
 publications = biomarkit.download_corpus(check_opensource=True)
 
 # Query metadata for all DOIs in the active corpus: 
@@ -68,6 +69,9 @@ for pub in publications:
           pub.final_md_filepath
           )
 ```
+
+`load_corpus()` itself returns the `Publication` objects for every manuscript already downloaded, so you can get them
+back without triggering a new download run.
 
 ---
 ## Configuration
@@ -92,7 +96,6 @@ All user-facing settings live in `secrets.env` (copy from [`secrets.env.example`
 
 | Setting | Description |
 |---|---|
-| `CORPUS_NAME` | Name of the active corpus folder under `corpora/` |
 | `USER_EMAIL` | Your email address (required by some publisher APIs) |
 | `WILEY_TDM_TOKEN` | Wiley TDM API token (optional) |
 | `SPRINGER_API_KEY` | Springer API key (optional) |
@@ -102,7 +105,7 @@ All user-facing settings live in `secrets.env` (copy from [`secrets.env.example`
 
 ### The corpus folder structure
 
-All inputs and outputs for a Scopus query live under `corpora/<corpus_name>/` inside your workspace directory. The active corpus is selected by setting `CORPUS_NAME` in `secrets.env`. Each corpus folder has the following structure:
+All inputs and outputs for a Scopus query live in one corpus folder: `corpora/<corpus_name>/` inside your workspace directory, or any folder path you pass to `load_corpus()`. The active corpus is selected in your script by calling `biomarkit.load_corpus(...)`. Each corpus folder has the following structure:
 
 ```
 corpora/
@@ -115,7 +118,7 @@ corpora/
     ├── logs/            # Run logs
     └── sqlite.db        # SQLite cache for this corpus
 ```
-Everything except `scopus.csv` is created automatically. Create a new corpus with `build_new_corpus(name="my_corpus", scopus_file="path/to/scopus.csv")`.
+Everything is created automatically. Create a new corpus with `load_corpus("my_corpus", scopus_file="path/to/scopus.csv")`; it asks for confirmation before building, or pass `build=True` to skip the prompt (e.g. in batch jobs).
 
 ---
 

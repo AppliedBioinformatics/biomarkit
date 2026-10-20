@@ -5,48 +5,30 @@ from unittest.mock import patch
 from biomarkit.config import TMP_DIR
 import sys
 
-RAW_MD = TMP_DIR / "test_raw_markdown"
-FINAL_MD = TMP_DIR / "test_final_markdown"
-
-
-@patch("biomarkit.text_transformation.utils.generics.JSON_STRUCT_DIR", RAW_MD)
-@patch("biomarkit.text_transformation.utils.generics.FINAL_MARKDOWN_DIR", FINAL_MD)
-def test_check_transformation_filepaths_creates_directories():
+def test_check_transformation_filepaths_creates_directories(active_corpus):
     from biomarkit.text_transformation.utils.generics import check_transformation_filepaths
 
-    # Ensure dirs don't exist before the call.
-    for d in (RAW_MD, FINAL_MD):
-        if d.exists():
-            d.rmdir()
+    assert not active_corpus.json_dir.exists()
+    assert not active_corpus.final_md_dir.exists()
 
     check_transformation_filepaths()
 
-    assert RAW_MD.exists()
-    assert FINAL_MD.exists()
-
-    # Cleanup.
-    for d in (RAW_MD, FINAL_MD):
-        d.rmdir()
+    assert active_corpus.json_dir.exists()
+    assert active_corpus.final_md_dir.exists()
 
 
-@patch("biomarkit.text_transformation.utils.generics.JSON_STRUCT_DIR", RAW_MD)
-@patch("biomarkit.text_transformation.utils.generics.FINAL_MARKDOWN_DIR", FINAL_MD)
-def test_check_transformation_filepaths_existing_directories():
+def test_check_transformation_filepaths_existing_directories(active_corpus):
     from biomarkit.text_transformation.utils.generics import check_transformation_filepaths
 
     # Pre-create dirs.
-    for d in (RAW_MD, FINAL_MD):
+    for d in (active_corpus.json_dir, active_corpus.final_md_dir):
         d.mkdir(parents=True, exist_ok=True)
 
     # Should not raise even if dirs already exist.
     check_transformation_filepaths()
 
-    assert RAW_MD.exists()
-    assert FINAL_MD.exists()
-
-    # Cleanup.
-    for d in (RAW_MD, FINAL_MD):
-        d.rmdir()
+    assert active_corpus.json_dir.exists()
+    assert active_corpus.final_md_dir.exists()
 
 
 FAKE_VENV_DIR = TMP_DIR / "tests_tmp"
@@ -247,15 +229,14 @@ DB_SCHEMA = """
     final_md_filepath TEXT)
 """
 
-TMP_TEST_DB = TMP_DIR / "tests_tmp" / "test_cache_markdowns.sqlite"
-
-@pytest.mark.skipif(sys.platform == "win32", reason="Does not run on Windows")
 def _make_test_db(rows: list[dict]) -> None:
-    """Helper — creates a fresh test DB and inserts the given rows."""
-    TMP_TEST_DB.parent.mkdir(parents=True, exist_ok=True)
-    if TMP_TEST_DB.exists():
-        TMP_TEST_DB.unlink()
-    with _sqlite3.connect(TMP_TEST_DB) as conn:
+    """Helper — creates a fresh cache DB for the active corpus and inserts the given rows."""
+    from biomarkit.config import get_corpus
+    db = get_corpus().db
+    db.parent.mkdir(parents=True, exist_ok=True)
+    if db.exists():
+        db.unlink()
+    with _sqlite3.connect(db) as conn:
         conn.execute(DB_SCHEMA)
         conn.executemany(
             "INSERT INTO cache (doi, downloaded_from, publication_filepath, content_json_filepath, final_md_filepath) "
@@ -264,7 +245,6 @@ def _make_test_db(rows: list[dict]) -> None:
         )
 
 
-@patch("biomarkit.text_transformation.utils.generics.DB_CACHE_FILE_NAME", TMP_TEST_DB)
 def test_check_cache_for_markdowns_empty_db(caplog):
     """Logs correct counts when the cache is empty."""
     from biomarkit.text_transformation.utils.generics import check_cache_for_markdowns
@@ -279,7 +259,6 @@ def test_check_cache_for_markdowns_empty_db(caplog):
     assert "0 with final markdown" in caplog.text
 
 @pytest.mark.skipif(os.name == 'nt', reason="Permission issues on Windows")
-@patch("biomarkit.text_transformation.utils.generics.DB_CACHE_FILE_NAME", TMP_TEST_DB)
 def test_check_cache_for_markdowns_mixed(caplog):
     """Logs correct counts for a mix of processed and unprocessed publications."""
     from biomarkit.text_transformation.utils.generics import check_cache_for_markdowns
@@ -302,7 +281,6 @@ def test_check_cache_for_markdowns_mixed(caplog):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Does not run on Windows")
-@patch("biomarkit.text_transformation.utils.generics.DB_CACHE_FILE_NAME", TMP_TEST_DB)
 def test_check_cache_for_markdowns_returns_none():
     """Function returns None (log-only, no return value)."""
     from biomarkit.text_transformation.utils.generics import check_cache_for_markdowns

@@ -5,56 +5,79 @@ from pathlib import Path
 
 from biomarkit.text_download.basemodels.publication import Publication
 
+def _can_prompt() -> bool:
+    """True when input() can reach a user: an interactive terminal or a Jupyter kernel."""
+    import sys
+    return sys.stdin is not None and sys.stdin.isatty() or "ipykernel" in sys.modules
+
 # High-level functions.
-def build_new_corpus(name: str, scopus_file: str | Path, set_active: bool = True) -> Path:
+def load_corpus(corpus: str | Path, scopus_file: str | Path | None = None,
+                build: bool | None = None) -> list[Publication]:
     """
-    Creates the folder structure for a new corpus and copies the Scopus CSV into it.
+    Set the active corpus for this session, building it first if it doesn't exist, and return
+    Publication objects for every publication already in its download cache.
+
+    All other pipeline functions (download_corpus, transform_text, standardise_text) read and
+    write the corpus loaded here, so call this first.
 
     Parameters
     ----------
-    name : str
-        Folder name for the new corpus (no path separators).
-    scopus_file : str | Path
-        Path to the Scopus export CSV to seed the corpus with.
-    set_active : bool, default True
-        When True, writes CORPUS_NAME=<name> into secrets.env so subsequent
-        pipeline calls target this corpus without any manual edits.
-
-    Returns
-    -------
-    Path
-        Path to the newly created corpus folder.
-    """
-    from biomarkit.text_download.utils.generics import build_new_corpus as _build_new_corpus
-    return _build_new_corpus(name=name, scopus_file=scopus_file, set_active=set_active)
-
-def load_corpus() -> list[Publication]:
-    """
-    Reconstruct Publication objects for publications that are already in the download cache.
-
-    Reads all DOIs from the SQLite cache, filters the Scopus CSV to only those DOIs to
-    obtain metadata (title, publisher, year, abstract), then populates all three filepath
-    fields (publication_filepath, content_json_filepath, final_md_filepath) from the cache.
-    No downloading or conversion is performed.
+    corpus : str | Path
+        A corpus name (resolved to <BIOMARKIT_DIR>/corpora/<name>) or a path to a corpus folder.
+    scopus_file : str | Path | None, default None
+        Scopus export CSV. Required to build a new corpus; copied into an existing corpus only
+        if it has no scopus.csv yet.
+    build : bool | None, default None
+        What to do if the corpus folder doesn't exist. None asks for confirmation when running
+        interactively (terminal or notebook) and raises otherwise. True builds without asking
+        (use this in batch jobs). False never builds and raises FileNotFoundError.
 
     Returns
     -------
     list[Publication]
         One Publication per DOI found in the cache, with metadata from the Scopus CSV and
-        filepaths populated wherever they exist in the cache.
+        filepaths populated wherever they exist in the cache. Empty for a new corpus.
     """
-    from biomarkit.config import SCOPUS_INPUT_CSV_NAME, DB_CACHE_FILE_NAME
+    from biomarkit.config import set_active_corpus
     from biomarkit.text_download.filter import filter_scopus_csv as ftr
     from biomarkit.text_download.database.database import get_all_cached_dois, get_row_for_doi, _to_absolute
+    from biomarkit.text_download.utils.generics import resolve_corpus_path, build_corpus
 
-    if not DB_CACHE_FILE_NAME.exists():
+    corpus_dir = resolve_corpus_path(corpus)
+
+    if not corpus_dir.exists():
+        if build is False:
+            raise FileNotFoundError(f"Corpus not found at {corpus_dir}.")
+        if scopus_file is None:
+            raise ValueError(f"Corpus not found at {corpus_dir}. Pass scopus_file=... to build a new corpus there.")
+        if build is None:
+            no_prompt_error = FileNotFoundError(
+                f"Corpus not found at {corpus_dir}. Pass build=True to build it without confirmation."
+            )
+            if not _can_prompt():
+                raise no_prompt_error
+            try:
+                answer = input(f"Corpus not found at {corpus_dir}. Build a new corpus there? [y/N] ")
+            except EOFError:
+                # stdin looked interactive but isn't (e.g. redirected from NUL on Windows).
+                raise no_prompt_error from None
+            if answer.strip().lower() not in ("y", "yes"):
+                raise FileNotFoundError(f"Corpus not built at {corpus_dir}.")
+        build_corpus(corpus_dir, scopus_file)
+    elif scopus_file is not None:
+        build_corpus(corpus_dir, scopus_file)
+
+    paths = set_active_corpus(corpus_dir)
+    logging.info(f"Active corpus: {paths.root}")
+
+    if not paths.db.exists():
         return []
 
-    cached_dois = set(get_all_cached_dois(DB_CACHE_FILE_NAME))
+    cached_dois = set(get_all_cached_dois(paths.db))
     if not cached_dois:
         return []
 
-    raw_df = ftr.load_scopus_csv(SCOPUS_INPUT_CSV_NAME)
+    raw_df = ftr.load_scopus_csv(paths.scopus_csv)
     df = ftr.remove_imperfect_rows(df=raw_df)
     df = ftr.synchronise_publishers(df=df)
     df = df[df["DOI"].isin(cached_dois)]
@@ -62,18 +85,17 @@ def load_corpus() -> list[Publication]:
     publications = ftr.build_publication_objects(df=df)
 
     for pub in publications:
-        row = get_row_for_doi(pub.doi, db_path=DB_CACHE_FILE_NAME)
+        row = get_row_for_doi(pub.doi, db_path=paths.db)
         if row is None:
             continue
         if row.get("publication_filepath"):
-            pub.publication_filepath = _to_absolute(row["publication_filepath"], DB_CACHE_FILE_NAME)
+            pub.publication_filepath = _to_absolute(row["publication_filepath"], paths.db)
         if row.get("content_json_filepath"):
-            pub.content_json_filepath = _to_absolute(row["content_json_filepath"], DB_CACHE_FILE_NAME)
+            pub.content_json_filepath = _to_absolute(row["content_json_filepath"], paths.db)
         if row.get("final_md_filepath"):
-            pub.final_md_filepath = _to_absolute(row["final_md_filepath"], DB_CACHE_FILE_NAME)
+            pub.final_md_filepath = _to_absolute(row["final_md_filepath"], paths.db)
 
     return publications
-
 
 def download_corpus(check_opensource: bool = True, generate_report: bool = False) -> list[Publication]:
     """
@@ -99,7 +121,7 @@ def download_corpus(check_opensource: bool = True, generate_report: bool = False
         filepath of the downloaded PDF or XML (None if download failed).
     """
 
-    from biomarkit.config import SCOPUS_INPUT_CSV_NAME
+    from biomarkit.config import get_corpus
     from biomarkit.text_download.filter import filter_scopus_csv as ftr
     from biomarkit.text_download.utils.generics import setup_logging, setup_run, clean_publications
     from biomarkit.text_download.controller.controller import Controller
@@ -115,7 +137,7 @@ def download_corpus(check_opensource: bool = True, generate_report: bool = False
     clean_publications()
 
     # Load input query and filter.
-    raw_df = ftr.load_scopus_csv(SCOPUS_INPUT_CSV_NAME)
+    raw_df = ftr.load_scopus_csv(get_corpus().scopus_csv)
 
     # Filter + Synchronize. (Can add more steps here)
     df = ftr.remove_imperfect_rows(df=raw_df)
@@ -293,7 +315,7 @@ def standardise_text(
         standardised publications have final_md_filepath set; others have it as None.
     """
 
-    from biomarkit.config import DB_CACHE_FILE_NAME
+    from biomarkit.config import get_corpus
     from biomarkit.standardisation.generics import prepare_standardisation
     from biomarkit.standardisation.text_cleaning.cleaner import Cleaner
 
@@ -323,7 +345,7 @@ def standardise_text(
     # Instantiate the Cleaner class and clean the publications according to the params defined by the user.
     cleaner = Cleaner(
         publications=publications,
-        cache=DB_CACHE_FILE_NAME,
+        cache=get_corpus().db,
         context=context
     )
     cleaner.clean_all()
@@ -334,11 +356,14 @@ def standardise_text(
 
 
 if __name__ == "__main__":
+    # Usage: uv run python -m biomarkit.pipeline <corpus name or path>
+    import sys
     from biomarkit.text_download.utils.generics import setup_logging
 
     # Setup.
     setup_logging(level=logging.INFO)
     logging.info("Complete a full new corpus conversion.")
+    load_corpus(sys.argv[1], build=False)
 
     # Download.
     publications = download_corpus(check_opensource=True, generate_report=True)

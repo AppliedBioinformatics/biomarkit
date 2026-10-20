@@ -1,3 +1,5 @@
+from __future__ import annotations
+from dataclasses import dataclass
 from pathlib import Path
 from dotenv import load_dotenv
 from os import getenv
@@ -19,19 +21,58 @@ if SECRETS_FILE:
 # falls back to cwd so installed usage works without any extra configuration.
 BASE_DIR = Path(getenv("BIOMARKIT_DIR", Path.cwd())).resolve()
 
-# Corpus selection — set CORPUS_NAME in secrets.env to choose the active corpus.
-CORPUS_NAME = getenv("CORPUS_NAME", "default")
-
-# Corpus folder layout.
+# Default parent folder for corpora referenced by name in load_corpus().
 CORPORA_DIR = BASE_DIR / "corpora"
-CORPUS_DIR = CORPORA_DIR / CORPUS_NAME
-SCOPUS_INPUT_CSV_NAME = CORPUS_DIR / "scopus.csv"
-DB_CACHE_FILE_NAME = CORPUS_DIR / "sqlite.db"
-DOWNLOAD_DIR = CORPUS_DIR / "manuscripts"
-JSON_STRUCT_DIR = CORPUS_DIR / "intermediates"
-FINAL_MARKDOWN_DIR = CORPUS_DIR / "results"
-REPORT_DIR = CORPUS_DIR / "reports"
-LOG_DIR = CORPUS_DIR / "logs"
+
+
+@dataclass(frozen=True)
+class CorpusPaths:
+    """Folder layout of a single corpus."""
+    root: Path
+
+    @property
+    def scopus_csv(self) -> Path:
+        return self.root / "scopus.csv"
+
+    @property
+    def db(self) -> Path:
+        return self.root / "sqlite.db"
+
+    @property
+    def download_dir(self) -> Path:
+        return self.root / "manuscripts"
+
+    @property
+    def json_dir(self) -> Path:
+        return self.root / "intermediates"
+
+    @property
+    def final_md_dir(self) -> Path:
+        return self.root / "results"
+
+    @property
+    def report_dir(self) -> Path:
+        return self.root / "reports"
+
+    @property
+    def log_dir(self) -> Path:
+        return self.root / "logs"
+
+
+# Active corpus — set at runtime by biomarkit.load_corpus().
+_active_corpus: CorpusPaths | None = None
+
+
+def set_active_corpus(root: Path) -> CorpusPaths:
+    global _active_corpus
+    _active_corpus = CorpusPaths(Path(root).resolve())
+    return _active_corpus
+
+
+def get_corpus() -> CorpusPaths:
+    if _active_corpus is None:
+        raise RuntimeError("No corpus loaded — call biomarkit.load_corpus(...) first.")
+    return _active_corpus
 
 # Shared scratch space (not corpus-specific).
 TMP_DIR = BASE_DIR / "tmp"

@@ -25,11 +25,10 @@ FAKE_MINERU = Path("/fake/mineru.exe")
 # __init__
 # ---------------------------------------------------------------------------
 
-def test_init_sets_output_dir_to_raw_markdown_dir():
-    from biomarkit.config import JSON_STRUCT_DIR
+def test_init_sets_output_dir_to_raw_markdown_dir(active_corpus):
     from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
     converter = MinerUPdfTransformer(publication_list=[])
-    assert converter.output_dir == JSON_STRUCT_DIR
+    assert converter.output_dir == active_corpus.json_dir
 
 
 def test_init_defaults_to_local_gpu():

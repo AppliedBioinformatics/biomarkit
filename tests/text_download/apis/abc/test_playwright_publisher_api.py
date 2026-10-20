@@ -31,7 +31,6 @@ def _make_client(publications):
          patch("biomarkit.text_download.apis.abc.publisher_api.API_URL_TO_NAME", {"dummy": "http://dummy"}), \
          patch("biomarkit.text_download.apis.abc.publisher_api.API_KEY_TO_NAME", {"dummy": ""}), \
          patch("biomarkit.text_download.apis.abc.publisher_api.USER_EMAIL", "test@example.com"), \
-         patch("biomarkit.text_download.apis.abc.publisher_api.DOWNLOAD_DIR", Path("/tmp/downloads")), \
          patch.object(PublisherApi, "_test_url", return_value=True):
         return DummyPlaywrightClient(name="dummy", publication_list=publications)
 

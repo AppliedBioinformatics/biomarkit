@@ -1,11 +1,27 @@
 ﻿import pytest
 import logging
-from biomarkit.config import LOG_DIR
+from biomarkit import config
+
+
+@pytest.fixture(autouse=True)
+def active_corpus(tmp_path):
+    """
+    Gives every test its own empty active corpus under tmp_path, and clears it afterwards so no test leaks corpus
+    state into another. Request this fixture by name to get the CorpusPaths for the test's corpus.
+
+    Returns
+    -------
+    CorpusPaths
+    """
+    paths = config.set_active_corpus(tmp_path / "corpus")
+    yield paths
+    config._active_corpus = None
+
 
 @pytest.fixture(scope="session", autouse=True)
-def cleanup_logs_on_test_finish():
+def close_log_handlers_on_test_finish():
     """
-    Automatically cleans the log folder after each test.
+    Closes all log handlers after the test session.
 
     Returns
     -------
@@ -19,12 +35,3 @@ def cleanup_logs_on_test_finish():
         for handler in logger.handlers[:]:
             handler.close()
             logger.removeHandler(handler)
-
-    if LOG_DIR.exists():
-        for log_file in LOG_DIR.glob("*.log"):
-            try:
-                log_file.unlink()
-            except OSError:
-                # File held open by another process (e.g. a live pipeline run
-                # on the active corpus) — leave it in place.
-                pass

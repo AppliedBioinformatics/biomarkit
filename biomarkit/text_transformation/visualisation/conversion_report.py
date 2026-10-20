@@ -10,7 +10,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 
-from biomarkit.config import REPORT_DIR
+from biomarkit.config import get_corpus
 from biomarkit.text_download.basemodels.publication import Publication
 from biomarkit.text_download.utils.generics import build_plotly_report
 
@@ -223,7 +223,7 @@ def build_conversion_report(
         Publications already converted in a prior run
         (controller.needs_processing + controller.fully_processed).
     out_file : Path | None
-        Output path. Defaults to REPORT_DIR/conversion_report_<timestamp>.html.
+        Output path. Defaults to <corpus>/reports/conversion_report_<timestamp>.html.
     """
     df = _make_conversion_df(newly_converted, pre_cached)
 
@@ -238,8 +238,9 @@ def build_conversion_report(
 
     if out_file is None:
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
-        REPORT_DIR.mkdir(parents=True, exist_ok=True)
-        out_file = REPORT_DIR / f"conversion_report_{timestamp}.html"
+        report_dir = get_corpus().report_dir
+        report_dir.mkdir(parents=True, exist_ok=True)
+        out_file = report_dir / f"conversion_report_{timestamp}.html"
 
     build_plotly_report(
         figures=figs,
