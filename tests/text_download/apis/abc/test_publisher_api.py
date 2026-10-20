@@ -2,7 +2,6 @@
 import requests.exceptions
 from pathlib import Path
 from unittest.mock import patch, MagicMock, mock_open
-from biomarkit.config import DB_CACHE_FILE_NAME
 from biomarkit.text_download.apis.abc.publisher_api import PublisherApi
 from tests.text_download.controller.test_controller import publications
 
@@ -19,8 +18,7 @@ class PublicationApiDummy(PublisherApi):
 @patch("biomarkit.text_download.apis.abc.publisher_api.API_URL_TO_NAME", {"unpaywall": "https://api.unpaywall.org"})
 @patch("biomarkit.text_download.apis.abc.publisher_api.API_KEY_TO_NAME", {"unpaywall": "fake-key"})
 @patch("biomarkit.text_download.apis.abc.publisher_api.USER_EMAIL", "test@example.com")
-@patch("biomarkit.text_download.apis.abc.publisher_api.DOWNLOAD_DIR", "/tmp/downloads")
-def test___init__sets_attributes(publications):
+def test___init__sets_attributes(publications, active_corpus):
 
     # Patch the _test_url check so __init__ passes.
     with patch.object(PublisherApi, "_test_url", return_value=True):
@@ -29,10 +27,23 @@ def test___init__sets_attributes(publications):
     assert api.name == "unpaywall"
     assert api.publication_list == publications
     assert api.email == "test@example.com"
-    assert api.download_dir == "/tmp/downloads"
+    assert api.download_dir == active_corpus.download_dir
     assert api.api_url == "https://api.unpaywall.org"
     assert api.api_key == "fake-key"
     assert api.timeout == 10
+
+def test__setup_logger_follows_active_corpus(tmp_path):
+    import logging
+    from biomarkit.config import set_active_corpus
+
+    set_active_corpus(tmp_path / "a")
+    api = PublicationApiDummy(name="unpaywall", publication_list=[])
+    set_active_corpus(tmp_path / "b")
+    api = PublicationApiDummy(name="unpaywall", publication_list=[])
+
+    file_handlers = [h for h in api.logger.handlers if isinstance(h, logging.FileHandler)]
+    assert len(file_handlers) == 1
+    assert Path(file_handlers[0].baseFilename) == (tmp_path / "b" / "logs" / "unpaywall_client.log").resolve()
 
 def test__init__raises_connection_error(publications):
     with patch.object(PublisherApi, "_test_url", return_value=False):
@@ -57,17 +68,15 @@ def test__test_url_failure(publications):
         result = api._test_url()
         assert result is False
 
-@patch("biomarkit.text_download.apis.abc.publisher_api.DOWNLOAD_DIR", Path("/tmp/downloads"))
-def test__build_download_filepath():
+def test__build_download_filepath(active_corpus):
     api = PublicationApiDummy(name="unpaywall", publication_list=[])
     with patch("biomarkit.text_download.apis.abc.publisher_api.random.choices", return_value=list("1234567890")):
         path = api._build_download_filepath(filetype="pdf")
 
     assert isinstance(path, Path)
-    assert path.parent == Path("/tmp/downloads")
+    assert path.parent == active_corpus.download_dir
     assert path.name == "unpaywall_1234567890.pdf"
 
-@patch("biomarkit.text_download.apis.abc.publisher_api.DOWNLOAD_DIR", Path("/tmp/downloads"))
 def test__build_download_filepath_source_override():
     api = PublicationApiDummy(name="unpaywall", publication_list=[])
     with patch("biomarkit.text_download.apis.abc.publisher_api.random.choices", return_value=list("1234567890")):
@@ -183,7 +192,7 @@ def test__download_pdf_if_valid_request_exception():
 
     assert result is False
 
-def test__cache_successful_download(publications):
+def test__cache_successful_download(publications, active_corpus):
     api = PublicationApiDummy(name="unpaywall", publication_list=publications)
 
     # Create a publication with a filepath.
@@ -198,7 +207,7 @@ def test__cache_successful_download(publications):
             doi=pub.doi,
             downloaded_from="unpaywall",
             publication_filepath=str(pub.publication_filepath),
-            db_path=DB_CACHE_FILE_NAME
+            db_path=active_corpus.db
         )
 
     # Failure.

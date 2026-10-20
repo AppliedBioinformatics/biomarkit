@@ -378,8 +378,7 @@ def _write_pub(tmp_path: Path) -> Publication:
 def test_clean_from_json_writes_markdown_file(tmp_path):
     pub = _write_pub(tmp_path)
     cleaner = make_cleaner(force_imrad_structure=False)
-    with patch("biomarkit.standardisation.text_cleaning.cleaner.FINAL_MARKDOWN_DIR", tmp_path):
-        markdown = cleaner.clean_from_json(pub)
+    markdown = cleaner.clean_from_json(pub)
     assert isinstance(markdown, str)
     assert len(markdown) > 0
     assert pub.final_md_filepath is not None
@@ -389,8 +388,7 @@ def test_clean_from_json_writes_markdown_file(tmp_path):
 def test_clean_from_json_does_not_call_llm_when_imrad_disabled(tmp_path):
     pub = _write_pub(tmp_path)
     cleaner = make_cleaner(force_imrad_structure=False)
-    with patch("biomarkit.standardisation.text_cleaning.cleaner.FINAL_MARKDOWN_DIR", tmp_path), \
-         patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier") as mock_llm:
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier") as mock_llm:
         cleaner.clean_from_json(pub)
     mock_llm.assert_not_called()
 
@@ -425,8 +423,7 @@ def test_clean_from_json_updates_cache(tmp_path):
     pub = _write_pub(tmp_path)
     cleaner = make_cleaner(force_imrad_structure=False)
     cleaner.cache = db
-    with patch("biomarkit.standardisation.text_cleaning.cleaner.FINAL_MARKDOWN_DIR", tmp_path):
-        cleaner.clean_from_json(pub)
+    cleaner.clean_from_json(pub)
 
     conn = sqlite3.connect(db)
     row = conn.execute("SELECT final_md_filepath FROM cache WHERE doi=?",

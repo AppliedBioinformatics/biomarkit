@@ -134,6 +134,10 @@ class PlaywrightPublisherApi(PublisherApi):
         """
         Queries Unpaywall to get the best open access PDF URL for a DOI.
 
+        Only Unpaywall's direct PDF link (url_for_pdf) is returned. Its generic "url" is often just the
+        article's landing page (e.g. https://doi.org/...), which never triggers a browser download, so
+        it is not used; clients fall back to their own publisher-specific PDF URL instead.
+
         Parameters
         ----------
         doi : str
@@ -150,7 +154,7 @@ class PlaywrightPublisherApi(PublisherApi):
             resp.raise_for_status()
             data = resp.json()
             best = data.get("best_oa_location") or {}
-            return best.get("url_for_pdf") or best.get("url")
+            return best.get("url_for_pdf")
 
         except AttributeError:
             self.logger.info(f"Unable to retrieve url for DOI: {doi}.")

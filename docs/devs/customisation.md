@@ -93,11 +93,11 @@ Key inherited helpers available inside `download_paper()`:
 
 | Helper | What it does |
 |---|---|
-| `self._build_download_filepath(filetype)` | Returns a unique `Path` under `DOWNLOAD_DIR` prefixed with `self.name` |
+| `self._build_download_filepath(filetype)` | Returns a unique `Path` under the active corpus's `manuscripts/` folder, prefixed with `self.name` |
 | `self._attempt_download(doi, url, filepath)` | GET request with standard error handling; returns `bool` |
 | `self._download_pdf_if_valid(url, filepath)` | Like `_attempt_download` but also checks the response starts with `%PDF`; returns `bool` |
 | `self._download_paper_from_url(url, filepath)` | Raw GET + write, raises on failure — use when you handle errors yourself |
-| `self.logger` | Instance logger writing to `LOG_DIR/my_publisher_client.log` |
+| `self.logger` | Instance logger writing to `<corpus>/logs/my_publisher_client.log` |
 | `self.api_url`, `self.api_key` | Populated from `config.py` via `self.name` |
 | `self.email` | `USER_EMAIL` from `secrets.env`, used by APIs that require polite-pool registration |
 

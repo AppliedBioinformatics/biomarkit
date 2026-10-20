@@ -78,12 +78,11 @@ def test_build_output_path_places_json_in_auto_subdir(tmp_path):
     assert result == tmp_path / stem / "auto" / f"{stem}_content_list_v2.json"
 
 
-def test_default_output_dir_is_raw_markdown_dir():
-    """Default output_dir is RAW_MARKDOWN_DIR."""
-    from biomarkit.config import JSON_STRUCT_DIR
+def test_default_output_dir_is_raw_markdown_dir(active_corpus):
+    """Default output_dir is the active corpus's intermediates folder."""
     cls = _make_converter_class(lambda p: None)
     converter = cls(publication_list=[])
-    assert converter.output_dir == JSON_STRUCT_DIR
+    assert converter.output_dir == active_corpus.json_dir
 
 
 # ---------------------------------------------------------------------------

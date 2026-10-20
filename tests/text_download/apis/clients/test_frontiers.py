@@ -52,13 +52,35 @@ class TestFrontiersClient:
             result = client.download_paper("10.1234/test")
         assert result == fake_path
 
-    def test_download_paper_with_url_failure(self, publications):
+    def test_download_paper_with_url_failure_and_fallback_failure(self, publications):
         client = FrontiersClient(publications)
         with patch.object(client, "_get_pdf_url", return_value="http://example.com/paper.pdf"), \
              patch.object(client, "_build_download_filepath", return_value=Path("/tmp/p.pdf")), \
-             patch.object(client, "_attempt_download", return_value=False):
+             patch.object(client, "_attempt_download", return_value=False), \
+             patch.object(client, "attempt_fallback", return_value=False) as mock_fb:
             result = client.download_paper("10.1234/test")
+        mock_fb.assert_called_once()
         assert result is None
+
+    def test_download_paper_with_url_failure_recovers_via_fallback(self, publications):
+        """A failed browser download (e.g. a page that never triggers a download) falls back to the direct PDF URL."""
+        client = FrontiersClient(publications)
+        with patch.object(client, "_get_pdf_url", return_value="http://example.com/paper.pdf"), \
+             patch.object(client, "_build_download_filepath", return_value=Path("/tmp/p.pdf")), \
+             patch.object(client, "_attempt_download", return_value=False), \
+             patch.object(client, "attempt_fallback", return_value=True) as mock_fb:
+            result = client.download_paper("10.1234/test")
+        mock_fb.assert_called_once_with(doi="10.1234/test", filepath=Path("/tmp/p.pdf"))
+        assert result == Path("/tmp/p.pdf")
+
+    def test_download_paper_success_skips_fallback(self, publications):
+        client = FrontiersClient(publications)
+        with patch.object(client, "_get_pdf_url", return_value="http://example.com/paper.pdf"), \
+             patch.object(client, "_build_download_filepath", return_value=Path("/tmp/p.pdf")), \
+             patch.object(client, "_attempt_download", return_value=True), \
+             patch.object(client, "attempt_fallback") as mock_fb:
+            client.download_paper("10.1234/test")
+        mock_fb.assert_not_called()
 
     def test_attempt_fallback_success(self, publications):
         client = FrontiersClient(publications)

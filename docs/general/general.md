@@ -37,22 +37,26 @@ select all results:
 ![1.png](../statics/1.png)
 4) Next to the select-all button, click "Export", then select "CSV", then tick the boxes as shown below:
 ![2.png](../statics/2.png)
-5) Wait for your export to complete (may take some time for large queries), once downloaded, rename the CSV file to 
-`scopus.csv`.
+5) Wait for your export to complete (may take some time for large queries).
 6) In Python, run the function below to generate a new `biomarkit` corpus: 
 
 ```python
 import biomarkit
-biomarkit.build_new_corpus(name="my_new_corpus", scopus_file="/path/to/my/scopus.csv", set_active=True)
+biomarkit.load_corpus("my_new_corpus", scopus_file="/path/to/my/scopus_export.csv")
 ```
 
-The function will automatically generate the following folder structure. By default, new corpora will be built inside the
-`corpora/` folder at the current working directory. A copy of `scopus.csv` will be created inside the new corpus 
-folder. 
+If the corpus doesn't exist yet, `load_corpus()` asks whether to build it:
+```
+Corpus not found at /path/to/corpora/my_new_corpus. Build a new corpus there? [y/N]
+```
+Answering `y` generates the folder structure below and copies your Scopus export into it as `scopus.csv`. A corpus can
+be given by name, in which case it is built inside the `corpora/` folder of your workspace directory, or as a full
+folder path (e.g. `load_corpus("/data/corpora/my_new_corpus", ...)`).
+
 ```
 ./corpora/
 └── <my_new_corpus>/
-    ├── scopus.csv       # Scopus query export (input — you need to place this here)
+    ├── scopus.csv       # Scopus query export (input — copied in from scopus_file)
     ├── manuscripts/     # Downloaded full-text PDFs/XMLs  output of `download_corpus()`
     ├── intermediates/   # Intermediate MinerU output files and JSON structures - output of `transform_text()`
     ├── results/         # Final Markdown files - output of `standardise_text()`
@@ -61,9 +65,32 @@ folder.
     └── sqlite.db        # SQLite cache for this corpus
 ```
 
-### Switching between corpora.
-You may want to switch between different corpora when running the software. You can switch the "active" corpus by
-updating the CORPUS_NAME variable in `secrets.env` to the name of the corpus you wish to set inside `./corpora`.
+### Running in batch jobs.
+The build prompt only appears when Python is running interactively (a terminal or a Jupyter notebook). In
+non-interactive runs, such as HPC batch jobs, cron or piped scripts, a missing corpus raises an error instead. Pass
+`build=True` to build without asking, or `build=False` to never build:
+
+```python
+biomarkit.load_corpus("my_new_corpus", scopus_file="/path/to/scopus_export.csv", build=True)
+```
+
+### Selecting and switching between corpora.
+`load_corpus()` also sets the "active" corpus for the rest of the Python session. `download_corpus()`,
+`transform_text()` and `standardise_text()` all read from and write to the active corpus, so every script should start
+with a call to `load_corpus()`. Calling a pipeline function before then raises an error. To switch to another corpus,
+call `load_corpus()` again with a different name or path:
+
+```python
+import biomarkit
+biomarkit.load_corpus("corpus_a")
+biomarkit.download_corpus()
+
+biomarkit.load_corpus("corpus_b")   # everything from here on uses corpus_b
+biomarkit.download_corpus()
+```
+
+`load_corpus()` also returns a `Publication` object for each manuscript that has already been downloaded (see
+[below](#loading-a-previously-downloaded-corpus-with-load_corpus)).
 
 ## Attempt download of all full-texts for your corpus.
 Once your corpus is set up, download is handled automatically, and once a manuscript is downloaded successfully, it is 
@@ -73,6 +100,7 @@ called again or restarted.
 To begin downloading full-text files for a corpus, run the following command: 
 ```python
 import biomarkit
+biomarkit.load_corpus("my_new_corpus")
 publications = biomarkit.download_corpus(check_opensource=True, generate_report=True)
 ```
 
@@ -80,6 +108,13 @@ publications = biomarkit.download_corpus(check_opensource=True, generate_report=
 Setting `check_opensource=False` will skip checking open-source download availability for each publication using websites 
 such as BioRxiv and Unpaywall and attempt to download the full-text directly from publisher-specific routes. This can
 save alot of time but is likley to reduce the total number of successful downloads.
+
+Setting `infer_publisher_from_doi=False` turns off publisher inference from DOI prefixes. By default, papers whose
+Scopus export has no publisher, or a publisher name biomarkit doesn't recognise, get a publisher guessed from the
+first part of their DOI (e.g. `10.1016/...` is Elsevier and `10.1007/...` is Springer), so they can still be
+downloaded through that publisher's API. A recognised publisher from Scopus is never overridden. Papers whose
+publisher can't be determined are still attempted through the open-access routes. Only rows missing a DOI, title or
+year are skipped.
 
 Setting `generate_report=True` will generate a HTML report that plots various metrics associated with the
 success/failure rates of the function. This includes information such as the total percentage of successful downloads.
@@ -93,6 +128,7 @@ by the function. For example:
 
 ```python
 import biomarkit
+biomarkit.load_corpus("my_new_corpus")
 publications = biomarkit.download_corpus()
 
 # Get the abstract, title and DOI for each publication.
@@ -106,6 +142,22 @@ for publication in publications:
     print(publication.publication_filepath)
 ```
 
+### Loading a previously downloaded corpus with load_corpus().
+If you have already run `download_corpus()` and want to get the `Publication` objects back without starting another
+download run, use the list returned by `load_corpus()`. It reads the corpus cache (sqlite.db) and returns one
+`Publication` object for each successfully downloaded manuscript. Metadata comes from `scopus.csv`, and the
+`publication_filepath`, `content_json_filepath` and `final_md_filepath` fields are filled in wherever those files
+already exist. No downloading or conversion is performed.
+
+```python
+import biomarkit
+publications = biomarkit.load_corpus("my_new_corpus")
+publications = biomarkit.transform_text(publications, mineru_tier="standard")
+```
+
+Unlike `download_corpus()`, publications that have not been downloaded are not included in the returned list. For a
+newly built corpus the list is empty.
+
 ### A Suggestion for maximising download performance.
 For downloading full-text manuscripts, we recommend running the software from an institutional IP (if applicable). This 
 often leads to a higher number of successful paper downloads, as institutional IPs are more likely to be able to have
@@ -113,20 +165,35 @@ access to full-texts of some manuscripts (particularly when downloading directly
 
 ## Generate JSON document structures for a corpus.
 Once you have downloaded your full-text manuscripts, you can begin document conversion by generating a JSON document
-structure file for each manuscript. For PDF files, this is done using OCR, with the [MinerU](https://github.com/opendatalab/mineru)
-tool. For XML files, a built-in parser is used. To generate the JSON document structure files for all publications in 
+structure file for each manuscript. PDF files are converted with [MinerU](https://github.com/opendatalab/mineru) 4
+(layout analysis, OCR, formula and table recognition). For XML files, a built-in parser is used. To generate the JSON document structure files for all publications in 
 the active corpus, run the following code:
 
 ```python
 import biomarkit
+biomarkit.load_corpus("my_new_corpus")
 publications = biomarkit.download_corpus()
-publications = biomarkit.transform_text(publications, mineru_backend="local-cpu", generate_report=True)
+publications = biomarkit.transform_text(publications, mineru_tier="standard", generate_report=True)
 ```
 
 This begins the process of generating the intermediate JSON structure files. Depending on the size of your corpus, 
 this may take a long time. All outputs from this function are stored in the `/intermediates` folder. This includes all
-JSON structure files, as well as other useful MinerU output files, such as raw Markdown text, figures in `.png` format,
-and other files useful for developers. For information on the `mineru_backend` parameter, see the documentation [here](general.md#instructions-for-gpu-integration).
+JSON structure files, as well as other useful MinerU output files, such as raw Markdown text, extracted figures, and
+MinerU's intermediate JSON, which are useful for developers. By default these are deleted as each PDF is converted,
+keeping only the JSON structure file and the `images/` folder it links to. Pass `cleanup_intermediates=False` to keep
+everything.
+
+### Choosing a MinerU tier.
+The `mineru_tier` parameter trades speed for quality:
+
+* `"basic"` - small models only (layout, OCR, formulas, tables). The fastest option, and practical without a GPU.
+* `"standard"` (default) - adds the MinerU vision-language model (VLM) for complex layouts. Best run on a GPU.
+* `"advanced"` - spends more VLM compute on difficult documents. Slowest.
+
+MinerU picks the device and the VLM engine itself. See [GPU integration](general.md#gpu-integration) for details.
+
+The first run downloads MinerU's models into `~/.mineru/models`. To download them ahead of time (e.g. before running
+on a machine without internet access), run `mineru-kit models download --tier standard`.
 
 Caching via the `sqlite.db` file is also enabled for this function, meaning that heavy computation does not need to be
 repeated if the pipeline is restarted and manuscript JSON structures have already been generated.
@@ -140,8 +207,9 @@ structured markdown files with:
 
 ```python
 import biomarkit
+biomarkit.load_corpus("my_new_corpus")
 publications = biomarkit.download_corpus()
-publications = biomarkit.transform_text(publications, mineru_backend="local-cpu", generate_report=True)
+publications = biomarkit.transform_text(publications, mineru_tier="standard", generate_report=True)
 publications = biomarkit.standardise_text(publications, 
                                           keep_figures=False, 
                                           keep_tables=True, 
@@ -195,9 +263,18 @@ if available:
     print(f"GPU recognised: {torch.cuda.get_device_name(0)} ({torch.cuda.device_count()} device(s))")
 ```
 
-To run `transform_text()` using the GPU set the parameter `mineru_backend="local-gpu"`. Optionally,
-you can also set MINERU_VIRTUAL_VRAM_SIZE in `secrets.env` to optimise performance. To run the function in CPU-only
-mode, set the parameter `mineru_backend="local-cpu"`. 
+MinerU uses the GPU automatically when one is available, both for its small models and for the VLM in the
+`"standard"` and `"advanced"` tiers. By default the VLM runs with llama.cpp, which needs no extra setup. Without a GPU,
+use `mineru_tier="basic"`; the VLM tiers still work on CPU but are very slow.
+
+MinerU's own settings (model folder, model source, VLM engine) live in `~/.mineru/config.yaml`. See the
+[MinerU documentation](https://opendatalab.github.io/MinerU/) for the available options.
+
+### Using a remote VLM server.
+To offload the VLM to another machine, run an OpenAI-compatible server (e.g. vLLM) serving
+`opendatalab/MinerU2.5-Pro-2605-1.2B`, then set `MINERU_VLM_SERVER_URL` (and `MINERU_VLM_API_KEY` if the server needs
+one) in `secrets.env`. The `"standard"` and `"advanced"` tiers then send VLM requests to that server; the small models
+still run locally.
 
 ## Instructions for Ollama integration.
 Access to a GPU enables `biomarkit` to utilise local classifier LLM that can massivley increase the accuracy of 

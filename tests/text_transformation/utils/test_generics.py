@@ -2,95 +2,67 @@
 import os
 from pathlib import Path
 from unittest.mock import patch
-from biomarkit.config import TMP_DIR
 import sys
 
-RAW_MD = TMP_DIR / "test_raw_markdown"
-FINAL_MD = TMP_DIR / "test_final_markdown"
-
-
-@patch("biomarkit.text_transformation.utils.generics.JSON_STRUCT_DIR", RAW_MD)
-@patch("biomarkit.text_transformation.utils.generics.FINAL_MARKDOWN_DIR", FINAL_MD)
-def test_check_transformation_filepaths_creates_directories():
+def test_check_transformation_filepaths_creates_directories(active_corpus):
     from biomarkit.text_transformation.utils.generics import check_transformation_filepaths
 
-    # Ensure dirs don't exist before the call.
-    for d in (RAW_MD, FINAL_MD):
-        if d.exists():
-            d.rmdir()
+    assert not active_corpus.json_dir.exists()
+    assert not active_corpus.final_md_dir.exists()
 
     check_transformation_filepaths()
 
-    assert RAW_MD.exists()
-    assert FINAL_MD.exists()
-
-    # Cleanup.
-    for d in (RAW_MD, FINAL_MD):
-        d.rmdir()
+    assert active_corpus.json_dir.exists()
+    assert active_corpus.final_md_dir.exists()
 
 
-@patch("biomarkit.text_transformation.utils.generics.JSON_STRUCT_DIR", RAW_MD)
-@patch("biomarkit.text_transformation.utils.generics.FINAL_MARKDOWN_DIR", FINAL_MD)
-def test_check_transformation_filepaths_existing_directories():
+def test_check_transformation_filepaths_existing_directories(active_corpus):
     from biomarkit.text_transformation.utils.generics import check_transformation_filepaths
 
     # Pre-create dirs.
-    for d in (RAW_MD, FINAL_MD):
+    for d in (active_corpus.json_dir, active_corpus.final_md_dir):
         d.mkdir(parents=True, exist_ok=True)
 
     # Should not raise even if dirs already exist.
     check_transformation_filepaths()
 
-    assert RAW_MD.exists()
-    assert FINAL_MD.exists()
-
-    # Cleanup.
-    for d in (RAW_MD, FINAL_MD):
-        d.rmdir()
+    assert active_corpus.json_dir.exists()
+    assert active_corpus.final_md_dir.exists()
 
 
-FAKE_VENV_DIR = TMP_DIR / "tests_tmp"
-FAKE_VENV_MINERU = FAKE_VENV_DIR / ".venv" / "Scripts" / "mineru.exe"
+# ---------------------------------------------------------------------------
+# check_mineru
+# ---------------------------------------------------------------------------
 
-
-@patch("biomarkit.text_transformation.utils.generics.BASE_DIR", FAKE_VENV_DIR)
-def test_find_mineru_finds_venv_executable():
+@patch("importlib.metadata.version", return_value="4.0.12")
+def test_check_mineru_accepts_mineru_4(mock_version):
     from biomarkit.text_transformation.utils.generics import check_mineru
-
-    FAKE_VENV_MINERU.parent.mkdir(parents=True, exist_ok=True)
-    FAKE_VENV_MINERU.touch()
-
-    result = check_mineru()
-
-    assert result == FAKE_VENV_MINERU
-
-    FAKE_VENV_MINERU.unlink()
+    assert check_mineru() == "4.0.12"
+    mock_version.assert_called_once_with("mineru")
 
 
-@patch("biomarkit.text_transformation.utils.generics.BASE_DIR", FAKE_VENV_DIR)
-@patch("biomarkit.text_transformation.utils.generics.shutil.which", return_value="C:/tools/mineru.exe")
-def test_find_mineru_falls_back_to_global(mock_which):
+@pytest.mark.parametrize("installed", ["3.4.4", "2.7.0"])
+def test_check_mineru_rejects_mineru_3_and_older(installed):
     from biomarkit.text_transformation.utils.generics import check_mineru
-
-    if FAKE_VENV_MINERU.exists():
-        FAKE_VENV_MINERU.unlink()
-
-    result = check_mineru()
-
-    assert result == Path("C:/tools/mineru.exe")
-    mock_which.assert_called_once_with("mineru")
+    with patch("importlib.metadata.version", return_value=installed):
+        with pytest.raises(ImportError, match="requires MinerU 4"):
+            check_mineru()
 
 
-@patch("biomarkit.text_transformation.utils.generics.BASE_DIR", FAKE_VENV_DIR)
-@patch("biomarkit.text_transformation.utils.generics.shutil.which", return_value=None)
-def test_find_mineru_raises_when_not_found(mock_which):
+def test_check_mineru_raises_when_metadata_incomplete():
+    """importlib.metadata.version() returns None for a half-uninstalled package."""
     from biomarkit.text_transformation.utils.generics import check_mineru
+    with patch("importlib.metadata.version", return_value=None):
+        with pytest.raises(ImportError, match="not installed"):
+            check_mineru()
 
-    if FAKE_VENV_MINERU.exists():
-        FAKE_VENV_MINERU.unlink()
 
-    with pytest.raises(FileNotFoundError, match="MinerU executable not found"):
-        check_mineru()
+def test_check_mineru_raises_when_not_installed():
+    from importlib.metadata import PackageNotFoundError
+    from biomarkit.text_transformation.utils.generics import check_mineru
+    with patch("importlib.metadata.version", side_effect=PackageNotFoundError("mineru")):
+        with pytest.raises(ImportError, match="not installed"):
+            check_mineru()
 
 
 # ---------------------------------------------------------------------------
@@ -126,109 +98,90 @@ def test_check_gpu_unavailable():
 # prepare_bulk_transformation
 # ---------------------------------------------------------------------------
 
-@patch("biomarkit.text_transformation.utils.generics.check_cache_for_markdowns")
-@patch("biomarkit.text_transformation.utils.generics.check_mineru")
-@patch("biomarkit.text_transformation.utils.generics.check_gpu", return_value=True)
-@patch("biomarkit.text_transformation.utils.generics.check_transformation_filepaths")
-def test_prepare_bulk_transformation_success(mock_filepaths, mock_gpu, mock_mineru, mock_cache):
+GENERICS = "biomarkit.text_transformation.utils.generics"
+
+
+@pytest.fixture
+def preflight_mocks():
+    """Patches the filesystem/cache/MinerU checks so prepare_bulk_transformation's own logic is tested."""
+    with patch(f"{GENERICS}.check_transformation_filepaths") as filepaths, \
+         patch(f"{GENERICS}.check_cache_for_markdowns") as cache, \
+         patch(f"{GENERICS}.check_mineru") as mineru:
+        yield type("Mocks", (), {"filepaths": filepaths, "cache": cache, "mineru": mineru})
+
+
+@pytest.mark.parametrize("tier", ["basic", "standard", "advanced"])
+def test_prepare_bulk_transformation_runs_all_checks(preflight_mocks, tier):
     from biomarkit.text_transformation.utils.generics import prepare_bulk_transformation
+    with patch(f"{GENERICS}.check_gpu", return_value=True), patch("biomarkit.config.MINERU_VLM_SERVER_URL", None):
+        prepare_bulk_transformation(mineru_tier=tier)
+    preflight_mocks.filepaths.assert_called_once()
+    preflight_mocks.cache.assert_called_once()
+    preflight_mocks.mineru.assert_called_once()
 
-    prepare_bulk_transformation()
 
-    mock_filepaths.assert_called_once()
-    mock_gpu.assert_called_once()
-    mock_mineru.assert_called_once()
-
-
-@patch("biomarkit.text_transformation.utils.generics.check_cache_for_markdowns")
-@patch("biomarkit.text_transformation.utils.generics.check_mineru")
-@patch("biomarkit.text_transformation.utils.generics.check_gpu", return_value=False)
-@patch("biomarkit.text_transformation.utils.generics.check_transformation_filepaths")
-def test_prepare_bulk_transformation_raises_when_no_gpu(mock_filepaths, mock_gpu, mock_mineru, mock_cache):
+@pytest.mark.parametrize("tier", ["flash", "local-gpu", "vllm"])
+def test_prepare_bulk_transformation_rejects_unknown_tier(tier):
     from biomarkit.text_transformation.utils.generics import prepare_bulk_transformation
-
-    with pytest.raises(RuntimeError, match="No GPU recognised"):
-        prepare_bulk_transformation()
-
-    mock_mineru.assert_not_called()
+    with pytest.raises(ValueError, match="Invalid mineru_tier"):
+        prepare_bulk_transformation(mineru_tier=tier)
 
 
-@patch("biomarkit.text_transformation.utils.generics.check_cache_for_markdowns")
-@patch("biomarkit.text_transformation.utils.generics.check_mineru", side_effect=FileNotFoundError("MinerU executable not found"))
-@patch("biomarkit.text_transformation.utils.generics.check_gpu", return_value=True)
-@patch("biomarkit.text_transformation.utils.generics.check_transformation_filepaths")
-def test_prepare_bulk_transformation_raises_when_mineru_missing(mock_filepaths, mock_gpu, mock_mineru, mock_cache):
+def test_prepare_bulk_transformation_propagates_mineru_import_error(preflight_mocks):
     from biomarkit.text_transformation.utils.generics import prepare_bulk_transformation
+    preflight_mocks.mineru.side_effect = ImportError("requires MinerU 4")
+    with patch(f"{GENERICS}.check_gpu", return_value=True), patch("biomarkit.config.MINERU_VLM_SERVER_URL", None):
+        with pytest.raises(ImportError, match="requires MinerU 4"):
+            prepare_bulk_transformation()
 
-    with pytest.raises(FileNotFoundError, match="MinerU executable not found"):
-        prepare_bulk_transformation()
 
-
-def test_prepare_bulk_transformation_rejects_unknown_endpoint():
+@pytest.mark.parametrize("tier", ["standard", "advanced"])
+def test_prepare_bulk_transformation_warns_vlm_tier_without_gpu_or_server(preflight_mocks, caplog, tier):
     from biomarkit.text_transformation.utils.generics import prepare_bulk_transformation
+    with caplog.at_level("WARNING"), patch(f"{GENERICS}.check_gpu", return_value=False), \
+         patch("biomarkit.config.MINERU_VLM_SERVER_URL", None):
+        prepare_bulk_transformation(mineru_tier=tier)
+    assert "very slow" in caplog.text
 
-    with pytest.raises(ValueError, match="Invalid mineru_backend"):
-        prepare_bulk_transformation(mineru_backend="remote")
 
-
-@patch("biomarkit.text_transformation.utils.generics.check_cache_for_markdowns")
-@patch("biomarkit.text_transformation.utils.generics.check_mineru")
-@patch("biomarkit.text_transformation.utils.generics.check_gpu", return_value=False)
-@patch("biomarkit.text_transformation.utils.generics.check_transformation_filepaths")
-@patch("biomarkit.text_transformation.utils.generics.check_vllm_config")
-def test_prepare_bulk_transformation_vllm_tolerates_missing_gpu(
-    mock_vllm, mock_filepaths, mock_gpu, mock_mineru, mock_cache
-):
-    """With remote inference the missing local GPU is a warning, not an error."""
+def test_prepare_bulk_transformation_basic_tier_does_not_check_gpu(preflight_mocks):
     from biomarkit.text_transformation.utils.generics import prepare_bulk_transformation
-
-    prepare_bulk_transformation(mineru_backend="vllm")
-
-    mock_vllm.assert_called_once()
-    mock_mineru.assert_called_once()
+    with patch(f"{GENERICS}.check_gpu") as mock_gpu, patch("biomarkit.config.MINERU_VLM_SERVER_URL", None):
+        prepare_bulk_transformation(mineru_tier="basic")
+    mock_gpu.assert_not_called()
 
 
-@patch("biomarkit.text_transformation.utils.generics.check_cache_for_markdowns")
-@patch("biomarkit.text_transformation.utils.generics.check_mineru")
-@patch("biomarkit.text_transformation.utils.generics.check_gpu", return_value=True)
-@patch("biomarkit.text_transformation.utils.generics.check_transformation_filepaths")
-def test_prepare_bulk_transformation_vllm_raises_when_secrets_missing(
-    mock_filepaths, mock_gpu, mock_mineru, mock_cache
-):
+def test_prepare_bulk_transformation_remote_vlm_does_not_need_gpu(preflight_mocks, caplog):
     from biomarkit.text_transformation.utils.generics import prepare_bulk_transformation
-
-    with patch("biomarkit.config.MINERU_VLLM_ENDPOINT", None), patch("biomarkit.config.MINERU_API_KEY", None):
-        with pytest.raises(ValueError, match="MINERU_VLLM_ENDPOINT and MINERU_API_KEY"):
-            prepare_bulk_transformation(mineru_backend="vllm")
-
-    mock_mineru.assert_not_called()
+    with caplog.at_level("WARNING"), patch(f"{GENERICS}.check_gpu") as mock_gpu, \
+         patch("biomarkit.config.MINERU_VLM_SERVER_URL", "http://vlm-host:30000"):
+        prepare_bulk_transformation(mineru_tier="standard")
+    mock_gpu.assert_not_called()
+    assert "very slow" not in caplog.text
 
 
 # ---------------------------------------------------------------------------
-# check_vllm_config
+# check_vlm_server_config
 # ---------------------------------------------------------------------------
 
-def test_check_vllm_config_passes_when_both_set():
-    from biomarkit.text_transformation.utils.generics import check_vllm_config
+@pytest.mark.parametrize("url", [None, ""])
+def test_check_vlm_server_config_unset_means_local(url):
+    from biomarkit.text_transformation.utils.generics import check_vlm_server_config
+    with patch("biomarkit.config.MINERU_VLM_SERVER_URL", url):
+        assert check_vlm_server_config() is False
 
-    with patch("biomarkit.config.MINERU_VLLM_ENDPOINT", "http://vllm-host:30000"), \
-         patch("biomarkit.config.MINERU_API_KEY", "test-key"):
-        check_vllm_config()
+
+def test_check_vlm_server_config_set_means_remote():
+    from biomarkit.text_transformation.utils.generics import check_vlm_server_config
+    with patch("biomarkit.config.MINERU_VLM_SERVER_URL", "http://vlm-host:30000"):
+        assert check_vlm_server_config() is True
 
 
-@pytest.mark.parametrize("endpoint, key, expected", [
-    (None, None, "MINERU_VLLM_ENDPOINT and MINERU_API_KEY"),
-    ("", "", "MINERU_VLLM_ENDPOINT and MINERU_API_KEY"),
-    ("http://vllm-host:30000", None, "MINERU_API_KEY"),
-    (None, "test-key", "MINERU_VLLM_ENDPOINT"),
-    ("   ", "test-key", "MINERU_VLLM_ENDPOINT"),
-])
-def test_check_vllm_config_raises_when_unfilled(endpoint, key, expected):
-    from biomarkit.text_transformation.utils.generics import check_vllm_config
-
-    with patch("biomarkit.config.MINERU_VLLM_ENDPOINT", endpoint), patch("biomarkit.config.MINERU_API_KEY", key):
-        with pytest.raises(ValueError, match=expected):
-            check_vllm_config()
+def test_check_vlm_server_config_rejects_whitespace_url():
+    from biomarkit.text_transformation.utils.generics import check_vlm_server_config
+    with patch("biomarkit.config.MINERU_VLM_SERVER_URL", "   "):
+        with pytest.raises(ValueError, match="MINERU_VLM_SERVER_URL"):
+            check_vlm_server_config()
 
 
 # ---------------------------------------------------------------------------
@@ -247,15 +200,14 @@ DB_SCHEMA = """
     final_md_filepath TEXT)
 """
 
-TMP_TEST_DB = TMP_DIR / "tests_tmp" / "test_cache_markdowns.sqlite"
-
-@pytest.mark.skipif(sys.platform == "win32", reason="Does not run on Windows")
 def _make_test_db(rows: list[dict]) -> None:
-    """Helper — creates a fresh test DB and inserts the given rows."""
-    TMP_TEST_DB.parent.mkdir(parents=True, exist_ok=True)
-    if TMP_TEST_DB.exists():
-        TMP_TEST_DB.unlink()
-    with _sqlite3.connect(TMP_TEST_DB) as conn:
+    """Helper — creates a fresh cache DB for the active corpus and inserts the given rows."""
+    from biomarkit.config import get_corpus
+    db = get_corpus().db
+    db.parent.mkdir(parents=True, exist_ok=True)
+    if db.exists():
+        db.unlink()
+    with _sqlite3.connect(db) as conn:
         conn.execute(DB_SCHEMA)
         conn.executemany(
             "INSERT INTO cache (doi, downloaded_from, publication_filepath, content_json_filepath, final_md_filepath) "
@@ -264,7 +216,6 @@ def _make_test_db(rows: list[dict]) -> None:
         )
 
 
-@patch("biomarkit.text_transformation.utils.generics.DB_CACHE_FILE_NAME", TMP_TEST_DB)
 def test_check_cache_for_markdowns_empty_db(caplog):
     """Logs correct counts when the cache is empty."""
     from biomarkit.text_transformation.utils.generics import check_cache_for_markdowns
@@ -279,7 +230,6 @@ def test_check_cache_for_markdowns_empty_db(caplog):
     assert "0 with final markdown" in caplog.text
 
 @pytest.mark.skipif(os.name == 'nt', reason="Permission issues on Windows")
-@patch("biomarkit.text_transformation.utils.generics.DB_CACHE_FILE_NAME", TMP_TEST_DB)
 def test_check_cache_for_markdowns_mixed(caplog):
     """Logs correct counts for a mix of processed and unprocessed publications."""
     from biomarkit.text_transformation.utils.generics import check_cache_for_markdowns
@@ -302,7 +252,6 @@ def test_check_cache_for_markdowns_mixed(caplog):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Does not run on Windows")
-@patch("biomarkit.text_transformation.utils.generics.DB_CACHE_FILE_NAME", TMP_TEST_DB)
 def test_check_cache_for_markdowns_returns_none():
     """Function returns None (log-only, no return value)."""
     from biomarkit.text_transformation.utils.generics import check_cache_for_markdowns
@@ -335,7 +284,7 @@ class _FakePub:
         self.content_json_filepath = content_json_filepath
 
 
-def test_cleanup_deletes_non_json_files(tmp_path):
+def test_cleanup_deletes_non_json_files_but_keeps_images(tmp_path):
     from biomarkit.text_transformation.utils.generics import cleanup_intermediate_files
 
     auto_dir, json_path = _make_fake_auto_dir(tmp_path)
@@ -343,8 +292,22 @@ def test_cleanup_deletes_non_json_files(tmp_path):
 
     cleanup_intermediate_files([pub])
 
-    remaining = list(auto_dir.iterdir())
-    assert remaining == [json_path]
+    assert sorted(p.name for p in auto_dir.iterdir()) == sorted([json_path.name, "images"])
+    assert (auto_dir / "images" / "fig1.jpg").exists()
+
+
+def test_prune_intermediate_dir_removes_mineru4_outputs(tmp_path):
+    from biomarkit.text_transformation.utils.generics import prune_intermediate_dir
+
+    auto_dir, json_path = _make_fake_auto_dir(tmp_path)
+    for name in ("middle_json.json", "markdown.md", "structured_content.json", "model_output.json"):
+        (auto_dir / name).write_text("{}")
+    (auto_dir / "other_dir").mkdir()
+
+    deleted = prune_intermediate_dir(json_path)
+
+    assert sorted(p.name for p in auto_dir.iterdir()) == sorted([json_path.name, "images"])
+    assert deleted == 7  # 4 MinerU 4 files + stem.md + stem_model.json + other_dir
 
 
 def test_cleanup_keeps_json_intact(tmp_path):

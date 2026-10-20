@@ -32,7 +32,7 @@ class Controller:
         logging.debug("Attempting to instantiate Controller.")
 
         self.publications = publication_list
-        self.cache = biomarkit.config.DB_CACHE_FILE_NAME
+        self.cache = biomarkit.config.get_corpus().db
         self.cached_publications = []
         self.uncached_publications = []
 

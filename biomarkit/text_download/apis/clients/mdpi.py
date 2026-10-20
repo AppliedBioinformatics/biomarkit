@@ -16,17 +16,41 @@ class MdpiClient(PlaywrightPublisherApi):
     def __init__(self, publication_list: list):
         super().__init__(name="mdpi", publication_list=publication_list, timeout=1)
 
+    def attempt_fallback(self, doi: str, filepath: str) -> bool:
+        """
+        Fallback for when Unpaywall has no PDF link: resolves the DOI to the MDPI article page in the
+        browser, then downloads <article URL>/pdf. Done in the browser (not requests) because MDPI's
+        bot protection rejects plain HTTP requests.
+        """
+        try:
+            self.logger.info(f"Resolving article page for {doi} via https://doi.org/{doi}")
+            self.page.goto(f"https://doi.org/{doi}", wait_until="domcontentloaded", timeout=30000)
+        except Exception as e:
+            self.logger.error(f"Could not resolve article page for {doi}: {e}")
+            return False
+
+        article_url = self.page.url.split("?")[0].split("#")[0].rstrip("/")
+        if "mdpi.com" not in article_url:
+            self.logger.error(f"DOI {doi} did not resolve to an MDPI article page (got {article_url}).")
+            return False
+        return self._attempt_download(doi=doi, url=f"{article_url}/pdf", filepath=filepath)
+
     def download_paper(self, doi: str) -> Optional[Path]:
         download_url = self._get_pdf_url(doi=doi)
-
-        if not download_url:
-            self.logger.info(f"No open access URL found for DOI: {doi}.")
-            return None
-
-        self.logger.info(f"Open access URL found for DOI: {doi}. Attempting to download...")
         filepath = self._build_download_filepath()
 
-        if not self._attempt_download(doi=doi, url=download_url, filepath=filepath):
+        success = False
+        if download_url:
+            self.logger.info(f"Open access URL found for DOI: {doi}. Attempting to download...")
+            success = self._attempt_download(doi=doi, url=download_url, filepath=filepath)
+        else:
+            self.logger.info(f"No open access PDF URL found for DOI: {doi}.")
+
+        if not success:
+            self.logger.info("Attempting fallback via the MDPI article page.")
+            success = self.attempt_fallback(doi=doi, filepath=filepath)
+
+        if not success:
             return None
 
         self.logger.info(f"Paper downloaded for DOI: {doi} at filepath: {filepath}.")

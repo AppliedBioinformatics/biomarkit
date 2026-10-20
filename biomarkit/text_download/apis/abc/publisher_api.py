@@ -5,7 +5,7 @@ from biomarkit.text_download.basemodels.publication import Publication
 from biomarkit.text_download.database.database import insert_row, _to_relative
 from biomarkit.text_download.apis.strings import default_headers
 from biomarkit.text_download.utils.generics import progress_split_bar
-from biomarkit.config import USER_EMAIL, API_KEY_TO_NAME, API_URL_TO_NAME, DOWNLOAD_DIR, DB_CACHE_FILE_NAME, LOG_DIR
+from biomarkit.config import USER_EMAIL, API_KEY_TO_NAME, API_URL_TO_NAME, get_corpus
 from pathlib import Path
 import random
 import logging
@@ -32,7 +32,7 @@ class PublisherApi(ABC):
         self.name = name
         self.publication_list = publication_list
         self.email = USER_EMAIL
-        self.download_dir = DOWNLOAD_DIR
+        self.download_dir = get_corpus().download_dir
         self.api_url = API_URL_TO_NAME[self.name]
         self.api_key = API_KEY_TO_NAME[self.name]
         self.timeout = timeout
@@ -48,7 +48,7 @@ class PublisherApi(ABC):
     def _setup_logger(self) -> logging.Logger:
         """
         Configures instance-specific logging to a file. This means that logs are separated by instance, and makes
-        debugging particular instances easier. All logs are saved at LOG_DIR location.
+        debugging particular instances easier. All logs are saved in the active corpus's logs folder.
 
         Returns
         -------
@@ -57,10 +57,18 @@ class PublisherApi(ABC):
         logger = logging.getLogger(f"PublisherApi.{self.name}")
         logger.setLevel(logging.INFO)
 
+        log_dir = get_corpus().log_dir
+        log_file = log_dir / f"{self.name}_client.log"
+
+        # Drop file handlers left over from a previously loaded corpus.
+        for handler in list(logger.handlers):
+            if isinstance(handler, logging.FileHandler) and Path(handler.baseFilename) != log_file.resolve():
+                logger.removeHandler(handler)
+                handler.close()
+
         # Ensure that multiple instances don't duplicate log handlers.
-        if not logger.handlers:
-            LOG_DIR.mkdir(parents=True, exist_ok=True)
-            log_file = LOG_DIR / f"{self.name}_client.log"
+        if not any(isinstance(h, logging.FileHandler) for h in logger.handlers):
+            log_dir.mkdir(parents=True, exist_ok=True)
             handler = logging.FileHandler(log_file)
             formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
             handler.setFormatter(formatter)
@@ -209,8 +217,8 @@ class PublisherApi(ABC):
         if pub.publication_filepath:
             self.logger.info("Adding publication to cache.")
             insert_row(doi=pub.doi, downloaded_from=self.name,
-                       publication_filepath=_to_relative(str(pub.publication_filepath), DB_CACHE_FILE_NAME),
-                       db_path=DB_CACHE_FILE_NAME)
+                       publication_filepath=_to_relative(str(pub.publication_filepath), get_corpus().db),
+                       db_path=get_corpus().db)
 
         else:
             self.logger.error("Publication object has no existing filepath attached. Why has it been passed for caching?")

@@ -1,84 +1,71 @@
-﻿import logging
+import logging
 import shutil
 import sqlite3
 from pathlib import Path
-from biomarkit.config import JSON_STRUCT_DIR, FINAL_MARKDOWN_DIR, BASE_DIR, DB_CACHE_FILE_NAME
+from biomarkit.config import MINERU_TIER_CHOICES, get_corpus
 
-MINERU_BACKEND_CHOICES = ("local-gpu", "local-cpu", "vllm")
+# Oldest MinerU major version whose Python SDK the converter supports.
+MINERU_MIN_MAJOR_VERSION = 4
 
-def prepare_bulk_transformation(mineru_backend: str = "local-gpu") -> None:
+
+def prepare_bulk_transformation(mineru_tier: str = "standard") -> None:
     """
     Carries out pre-flight checks before launching the text-transformation pipeline.
 
     Parameters
     ----------
-    mineru_backend : str - "local-gpu" runs MinerU on the local CUDA GPU (default);
-        "local-cpu" runs MinerU on CPU only (no GPU required, slower);
-        "vllm" sends inference to the remote vLLM server configured in secrets.env.
+    mineru_tier : str - MinerU parsing tier: "basic" (small models only, CPU-friendly),
+        "standard" (default; small models + VLM) or "advanced" (more VLM compute for hard documents).
 
     Raises
     ------
-    ValueError - If mineru_backend is not a recognised choice, or if
-        mineru_backend="vllm" and MINERU_VLLM_ENDPOINT / MINERU_API_KEY are unset.
-    FileNotFoundError - If the mineru executable cannot be located.
-    RuntimeError - If mineru_backend="local-gpu" and no CUDA-capable GPU is recognized by PyTorch.
+    ValueError - If mineru_tier is not a recognised choice, or MINERU_VLM_SERVER_URL is blank.
+    ImportError - If MinerU 4 or newer is not installed.
     """
-    if mineru_backend not in MINERU_BACKEND_CHOICES:
+    if mineru_tier not in MINERU_TIER_CHOICES:
         raise ValueError(
-            f"Invalid mineru_backend: {mineru_backend!r}. "
-            f"Allowed values: {', '.join(MINERU_BACKEND_CHOICES)}."
+            f"Invalid mineru_tier: {mineru_tier!r}. "
+            f"Allowed values: {', '.join(MINERU_TIER_CHOICES)}."
         )
 
     check_transformation_filepaths()
     check_cache_for_markdowns()
 
-    if mineru_backend == "vllm":
-        check_vllm_config()
-
-        if not check_gpu():
-            logging.warning(
-                "No local GPU recognised — proceeding anyway as MinerU inference "
-                "is delegated to the remote vLLM endpoint."
-            )
-
-    elif mineru_backend == "local-gpu":
-        if not check_gpu():
-            raise RuntimeError("No GPU recognised by PyTorch. Cannot proceed.")
-
-    elif mineru_backend == "local-cpu":
-        logging.info("CPU mode selected — skipping GPU check.")
+    remote_vlm = check_vlm_server_config()
+    if mineru_tier != "basic" and not remote_vlm and not check_gpu():
+        logging.warning(
+            f"No GPU recognised and no MINERU_VLM_SERVER_URL set — mineru_tier={mineru_tier!r} will run the "
+            f"MinerU VLM on CPU, which is very slow. Consider mineru_tier='basic' or a remote VLM server."
+        )
     check_mineru()
 
 
-def check_vllm_config() -> None:
+def check_vlm_server_config() -> bool:
     """
-    Affirms that the remote MinerU vLLM settings are filled in secrets.env.
-    Required before running transform_text(mineru_backend="vllm").
+    Checks the optional remote MinerU VLM settings in secrets.env.
+
+    Returns
+    -------
+    bool - True if a remote VLM server is configured, False if the VLM runs locally.
 
     Raises
     ------
-    ValueError - If MINERU_VLLM_ENDPOINT or MINERU_API_KEY is unset or blank.
+    ValueError - If MINERU_VLM_SERVER_URL is present but blank or whitespace.
     """
-    from biomarkit.config import MINERU_VLLM_ENDPOINT, MINERU_API_KEY
+    from biomarkit.config import MINERU_VLM_SERVER_URL
 
-    missing = [
-        name for name, value in (
-            ("MINERU_VLLM_ENDPOINT", MINERU_VLLM_ENDPOINT),
-            ("MINERU_API_KEY", MINERU_API_KEY),
-        )
-        if not (value and value.strip())
-    ]
-    if missing:
-        raise ValueError(
-            f"mineru_backend='vllm' requires {' and '.join(missing)} to be set in secrets.env."
-        )
-    logging.info(f"MinerU remote inference configured: {MINERU_VLLM_ENDPOINT}")
+    if MINERU_VLM_SERVER_URL is None or MINERU_VLM_SERVER_URL == "":
+        return False
+    if not MINERU_VLM_SERVER_URL.strip():
+        raise ValueError("MINERU_VLM_SERVER_URL in secrets.env is blank — set a server URL or remove it.")
+    logging.info(f"MinerU remote VLM configured: {MINERU_VLM_SERVER_URL}")
+    return True
 
 def check_transformation_filepaths() -> None:
     """
-    Checks that RAW_MARKDOWN_DIR and FINAL_MARKDOWN_DIR exist, creating them if not.
+    Checks that the active corpus's intermediates and results folders exist, creating them if not.
     """
-    for directory in (JSON_STRUCT_DIR, FINAL_MARKDOWN_DIR):
+    for directory in (get_corpus().json_dir, get_corpus().final_md_dir):
         if not directory.exists():
             logging.info(f"SETUP - Directory not found, creating: {directory}")
             directory.mkdir(parents=True, exist_ok=True)
@@ -86,31 +73,35 @@ def check_transformation_filepaths() -> None:
             logging.info(f"SETUP - Directory exists: {directory}")
 
 
-def check_mineru() -> Path:
+def check_mineru() -> str:
     """
-    Locates the MinerU CLI executable, checking the local .venv first
-    then falling back to the global PATH.
+    Checks that a supported MinerU version (4 or newer) is installed in this environment.
 
     Returns
     -------
-    Path - Path to the mineru executable.
+    str - The installed MinerU version.
 
     Raises
     ------
-    FileNotFoundError - If the mineru executable is not found in the .venv or on the global PATH.
+    ImportError - If MinerU is not installed, or is older than MINERU_MIN_MAJOR_VERSION.
     """
-    venv_mineru = BASE_DIR / ".venv" / "Scripts" / "mineru.exe"
-    if venv_mineru.exists():
-        logging.info(f"MinerU found in .venv: {venv_mineru}")
-        return venv_mineru
+    from importlib.metadata import PackageNotFoundError, version
 
-    global_mineru = shutil.which("mineru")
-    if global_mineru:
-        logging.info(f"MinerU found on global PATH: {global_mineru}")
-        return Path(global_mineru)
+    try:
+        installed = version("mineru")
+    except PackageNotFoundError:
+        installed = None
+    # version() returns None (rather than raising) when the package's metadata is incomplete.
+    if not installed:
+        raise ImportError("MinerU is not installed. Install it with: pip install \"mineru[torch]>=4.0.12,<5\"")
 
-    raise FileNotFoundError("MinerU executable not found in .venv or global PATH.")
-
+    if int(installed.split(".")[0]) < MINERU_MIN_MAJOR_VERSION:
+        raise ImportError(
+            f"MinerU {installed} is installed, but biomarkit requires MinerU {MINERU_MIN_MAJOR_VERSION} or newer. "
+            f"Upgrade with: pip install -U \"mineru[torch]>=4.0.12,<5\""
+        )
+    logging.info(f"MinerU {installed} found.")
+    return installed
 
 def check_gpu() -> bool:
     """
@@ -135,7 +126,7 @@ def check_cache_for_markdowns() -> None:
     """
     Checks the cache to see if any publications have already been processed. Controller will handle splitting of
     files this function just checks whether any are present and updates the log."""
-    with sqlite3.connect(DB_CACHE_FILE_NAME) as conn:
+    with sqlite3.connect(get_corpus().db) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM cache")
         total = cursor.fetchone()[0]
@@ -176,28 +167,43 @@ def finalise_transformation(publications: list) -> list:
     return publications
 
 
-def cleanup_intermediate_files(publications: list) -> None:
+def prune_intermediate_dir(content_json_path: Path) -> int:
     """
-    Delete non-essential files produced by MinerU from each publication's
-    intermediates directory, keeping only the *_content_list_v2.json.
-    Publications without content_json_filepath are silently skipped.
+    Deletes everything in a publication's intermediates folder except its content_list_v2.json and the
+    images/ folder it links to (needed for figure links when standardise_text(keep_figures=True)).
+
+    Parameters
+    ----------
+    content_json_path : Path - The publication's content_list_v2.json.
+
+    Returns
+    -------
+    int - Number of files/folders deleted.
     """
     deleted = 0
-    for pub in publications:
-        if pub.content_json_filepath is None:
+    for item in content_json_path.parent.iterdir():
+        if item == content_json_path or (item.is_dir() and item.name == "images"):
             continue
-        auto_dir = pub.content_json_filepath.parent
-        for item in auto_dir.iterdir():
-            if item == pub.content_json_filepath:
-                continue
-            if item.is_dir():
-                shutil.rmtree(item)
-            else:
-                item.unlink()
-            deleted += 1
+        if item.is_dir():
+            shutil.rmtree(item)
+        else:
+            item.unlink()
+        deleted += 1
+    return deleted
 
+
+def cleanup_intermediate_files(publications: list) -> None:
+    """
+    Delete non-essential files produced by MinerU from each publication's intermediates
+    directory, keeping only the *_content_list_v2.json and its images/ folder.
+    Publications without content_json_filepath are silently skipped.
+    """
+    deleted = sum(
+        prune_intermediate_dir(Path(pub.content_json_filepath))
+        for pub in publications if pub.content_json_filepath is not None
+    )
     logging.debug(f"cleanup_intermediate_files: removed {deleted} items from intermediates/.")
 
 
 if __name__ == "__main__":
-    check_mineru()
+    print(check_mineru())

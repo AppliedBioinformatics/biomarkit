@@ -21,7 +21,7 @@ class Controller:
         logging.debug("Attempting to instantiate text_transformation Controller.")
 
         self.publications = publication_list
-        self.cache = biomarkit.config.DB_CACHE_FILE_NAME
+        self.cache = biomarkit.config.get_corpus().db
 
         self.needs_transformation: List[Publication] = []
         self.needs_processing: List[Publication] = []

@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 import pandas as pd
 import plotly.io as pio
 
-from biomarkit.config import REPORT_DIR
+from biomarkit.config import get_corpus
 from biomarkit.text_download.basemodels.publication import Publication
 from biomarkit.text_download.utils.generics import build_plotly_report
 from biomarkit.text_download.visualisation.scopus_query_report import (
@@ -102,8 +102,9 @@ def build_text_download_report(
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
         out_file = f"text_download_report_{timestamp}.html"
 
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    output_file = REPORT_DIR / out_file
+    report_dir = get_corpus().report_dir
+    report_dir.mkdir(parents=True, exist_ok=True)
+    output_file = report_dir / out_file
     build_plotly_report(
         figures=all_figures, title=title, subtitle=subtitle, output_file=output_file,
         html_sections=html_sections,

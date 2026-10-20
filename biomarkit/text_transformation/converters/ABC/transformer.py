@@ -5,7 +5,7 @@ from typing import List
 
 from tqdm import tqdm
 
-from biomarkit.config import DB_CACHE_FILE_NAME, JSON_STRUCT_DIR
+from biomarkit.config import get_corpus
 from biomarkit.text_download.basemodels.publication import Publication
 from biomarkit.text_download.database.database import update_content_json_filepath, _to_relative
 from biomarkit.text_download.utils.generics import progress_split_bar
@@ -28,8 +28,8 @@ class Transformer(ABC):
 
     def __init__(self, publication_list: List[Publication]):
         self.publication_list = publication_list
-        self.output_dir = JSON_STRUCT_DIR
-        self.cache = DB_CACHE_FILE_NAME
+        self.output_dir = get_corpus().json_dir
+        self.cache = get_corpus().db
 
     @abstractmethod
     def transform2json(self, pub: Publication) -> Path | None:

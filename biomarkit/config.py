@@ -1,3 +1,5 @@
+from __future__ import annotations
+from dataclasses import dataclass
 from pathlib import Path
 from dotenv import load_dotenv
 from os import getenv
@@ -19,19 +21,58 @@ if SECRETS_FILE:
 # falls back to cwd so installed usage works without any extra configuration.
 BASE_DIR = Path(getenv("BIOMARKIT_DIR", Path.cwd())).resolve()
 
-# Corpus selection — set CORPUS_NAME in secrets.env to choose the active corpus.
-CORPUS_NAME = getenv("CORPUS_NAME", "default")
-
-# Corpus folder layout.
+# Default parent folder for corpora referenced by name in load_corpus().
 CORPORA_DIR = BASE_DIR / "corpora"
-CORPUS_DIR = CORPORA_DIR / CORPUS_NAME
-SCOPUS_INPUT_CSV_NAME = CORPUS_DIR / "scopus.csv"
-DB_CACHE_FILE_NAME = CORPUS_DIR / "sqlite.db"
-DOWNLOAD_DIR = CORPUS_DIR / "manuscripts"
-JSON_STRUCT_DIR = CORPUS_DIR / "intermediates"
-FINAL_MARKDOWN_DIR = CORPUS_DIR / "results"
-REPORT_DIR = CORPUS_DIR / "reports"
-LOG_DIR = CORPUS_DIR / "logs"
+
+
+@dataclass(frozen=True)
+class CorpusPaths:
+    """Folder layout of a single corpus."""
+    root: Path
+
+    @property
+    def scopus_csv(self) -> Path:
+        return self.root / "scopus.csv"
+
+    @property
+    def db(self) -> Path:
+        return self.root / "sqlite.db"
+
+    @property
+    def download_dir(self) -> Path:
+        return self.root / "manuscripts"
+
+    @property
+    def json_dir(self) -> Path:
+        return self.root / "intermediates"
+
+    @property
+    def final_md_dir(self) -> Path:
+        return self.root / "results"
+
+    @property
+    def report_dir(self) -> Path:
+        return self.root / "reports"
+
+    @property
+    def log_dir(self) -> Path:
+        return self.root / "logs"
+
+
+# Active corpus — set at runtime by biomarkit.load_corpus().
+_active_corpus: CorpusPaths | None = None
+
+
+def set_active_corpus(root: Path) -> CorpusPaths:
+    global _active_corpus
+    _active_corpus = CorpusPaths(Path(root).resolve())
+    return _active_corpus
+
+
+def get_corpus() -> CorpusPaths:
+    if _active_corpus is None:
+        raise RuntimeError("No corpus loaded — call biomarkit.load_corpus(...) first.")
+    return _active_corpus
 
 # Shared scratch space (not corpus-specific).
 TMP_DIR = BASE_DIR / "tmp"
@@ -47,16 +88,15 @@ ELSEVIER_API_KEY = getenv("ELSEVIER_API_KEY")
 LLM_BASE_URL = getenv("LLM_BASE_URL", "http://localhost:11434/v1")
 LLM_MODEL_NAME = getenv("LLM_MODEL_NAME", "gemma3:12b")
 
-# MinerU settings (optional). Integer GB of GPU VRAM MinerU is allowed to budget for;
-# overrides its auto-detection and raises inference batch sizes on larger GPUs.
-# Set via secrets.env only if you know what you are doing; unset means auto-detect.
-MINERU_VIRTUAL_VRAM_SIZE = getenv("MINERU_VIRTUAL_VRAM_SIZE")
+# MinerU parsing tiers accepted by transform_text(mineru_tier=...). "basic" uses small models only;
+# "standard" and "advanced" also run the MinerU VLM.
+MINERU_TIER_CHOICES = ("basic", "standard", "advanced")
 
-# MinerU remote inference (optional). Both must be set in secrets.env when
-# transform_text(mineru_endpoint="vllm") is used: the URL of a vLLM server hosting
-# the MinerU VLM model, and the API key the server was started with.
-MINERU_VLLM_ENDPOINT = getenv("MINERU_VLLM_ENDPOINT")
-MINERU_API_KEY = getenv("MINERU_API_KEY")
+# MinerU remote VLM (optional). When MINERU_VLM_SERVER_URL is set in secrets.env, the VLM tiers send
+# inference to this OpenAI-compatible server (e.g. vLLM serving MinerU2.5-Pro-2605-1.2B) instead of
+# running the VLM locally. The API key is only needed if the server was started with one.
+MINERU_VLM_SERVER_URL = getenv("MINERU_VLM_SERVER_URL")
+MINERU_VLM_API_KEY = getenv("MINERU_VLM_API_KEY")
 
 # Program settings (don't touch these unless you know what you are doing).
 MAX_THREADS = 10

@@ -20,7 +20,7 @@ from biomarkit.standardisation.content_list.filters import (
 )
 from biomarkit.standardisation.content_list.renderer import render
 from biomarkit.standardisation.llms.llm_classifier import LlamaClassifier
-from biomarkit.config import FINAL_MARKDOWN_DIR
+from biomarkit.config import get_corpus
 from biomarkit.text_download.database.database import update_final_md_filepath, _to_relative
 
 # Strips leading section numbering (e.g. "1.", "II.", "§3") before matching heading text.
@@ -344,8 +344,9 @@ class Cleaner:
             blocks = self._build_imrad_structure(blocks)
 
         stem = Path(pub.publication_filepath).stem
-        FINAL_MARKDOWN_DIR.mkdir(parents=True, exist_ok=True)
-        output_path = FINAL_MARKDOWN_DIR / f"{stem}.md"
+        final_md_dir = get_corpus().final_md_dir
+        final_md_dir.mkdir(parents=True, exist_ok=True)
+        output_path = final_md_dir / f"{stem}.md"
 
         # Compute relative path from the output .md to the auto/ images folder
         # so image links work in any markdown renderer without absolute paths.

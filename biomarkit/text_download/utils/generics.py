@@ -10,7 +10,7 @@ from collections import defaultdict
 from tqdm import tqdm
 from biomarkit.text_download.basemodels.publication import Publication
 from biomarkit.text_download.database.database import create_database
-from biomarkit.config import LOG_DIR, DOWNLOAD_DIR, REPORT_DIR, DB_CACHE_FILE_NAME, SCOPUS_INPUT_CSV_NAME, CORPUS_DIR
+from biomarkit.config import get_corpus
 
 
 class _TqdmLoggingHandler(logging.Handler):
@@ -22,112 +22,62 @@ class _TqdmLoggingHandler(logging.Handler):
             self.handleError(record)
 
 
-def _secrets_path() -> Path:
-    from os import getenv as _getenv
-    from biomarkit.config import _REPO_ROOT
-    candidates = [
-        Path(_getenv("BIOMARKIT_SECRETS")) if _getenv("BIOMARKIT_SECRETS") else None,
-        Path.cwd() / "secrets.env",
-        _REPO_ROOT / "secrets.env",
-    ]
-    found = next((p for p in candidates if p and p.exists()), None)
-    return found if found else Path.cwd() / "secrets.env"
-
-
-def create_corpus(name: str) -> Path:
+def resolve_corpus_path(corpus: "str | Path") -> Path:
     """
-    Creates the folder structure for a new corpus at corpora/<name>.
+    Resolves a corpus reference to a folder path.
 
-    Builds the empty corpus subfolders (manuscripts, intermediates, results, reports, logs).
-    Safe to call on an existing corpus — existing contents are left untouched.
+    A bare name (e.g. "my_corpus") resolves to CORPORA_DIR/<name>. An absolute path, or any value containing a path
+    separator, is treated as a folder path.
+    """
+    from biomarkit.config import CORPORA_DIR
+
+    if isinstance(corpus, Path) or Path(corpus).is_absolute() or "/" in corpus or "\\" in corpus:
+        return Path(corpus).resolve()
+
+    name = corpus.strip()
+    if not name or set('\\/:*?"<>|') & set(name):
+        raise ValueError(
+            f"Invalid corpus name: {name!r}. Use a plain folder name or a path to a corpus folder."
+        )
+    return (CORPORA_DIR / name).resolve()
+
+
+def build_corpus(corpus_dir: Path, scopus_file: "str | Path") -> Path:
+    """
+    Creates the folder structure for a corpus at corpus_dir and copies the Scopus CSV into it.
+
+    Safe to call on an existing corpus — existing contents (including an existing scopus.csv) are left untouched.
 
     Parameters
     ----------
-    name : str
-        Folder name for the new corpus (no path separators).
+    corpus_dir : Path
+        Folder to build the corpus in.
+    scopus_file : str | Path
+        Path to the Scopus export CSV to seed the corpus with.
 
     Returns
     -------
     Path
         Path to the corpus folder.
     """
-    from biomarkit.config import (
-        CORPORA_DIR, DOWNLOAD_DIR, JSON_STRUCT_DIR, FINAL_MARKDOWN_DIR, REPORT_DIR, LOG_DIR, SCOPUS_INPUT_CSV_NAME
-    )
-
-    name = name.strip()
-    if not name or set('\\/:*?"<>|') & set(name):
-        raise ValueError(
-            f"Invalid corpus name: {name!r}. Use a plain folder name without path separators."
-        )
-
-    corpus_dir = CORPORA_DIR / name
-    if corpus_dir.exists():
-        logging.warning(f"Corpus '{name}' already exists at {corpus_dir} — leaving existing contents untouched.")
-
-    for subdir_name in (
-        DOWNLOAD_DIR.name, JSON_STRUCT_DIR.name, FINAL_MARKDOWN_DIR.name, REPORT_DIR.name, LOG_DIR.name,
-    ):
-        (corpus_dir / subdir_name).mkdir(parents=True, exist_ok=True)
-
-    logging.info(
-        f"Corpus '{name}' ready at {corpus_dir}. Place your Scopus export there as "
-        f"'{SCOPUS_INPUT_CSV_NAME.name}' and set CORPUS_NAME = \"{name}\" in secrets.env to use it."
-    )
-    return corpus_dir
-
-
-def build_new_corpus(name: str, scopus_file: "str | Path", set_active: bool = True) -> Path:
-    """
-    Creates the folder structure for a new corpus and copies the Scopus CSV into it.
-
-    Parameters
-    ----------
-    name : str
-        Folder name for the new corpus (no path separators).
-    scopus_file : str | Path
-        Path to the Scopus export CSV to seed the corpus with.
-    set_active : bool, default True
-        When True, writes CORPUS_NAME=<name> into secrets.env so subsequent
-        pipeline calls target this corpus without any manual edits.
-
-    Returns
-    -------
-    Path
-        Path to the newly created corpus folder.
-    """
-    import re
     import shutil
+    from biomarkit.config import CorpusPaths
 
     scopus_src = Path(scopus_file)
     if not scopus_src.exists():
         raise FileNotFoundError(f"Scopus CSV not found: {scopus_src}")
 
-    corpus_dir = create_corpus(name)
+    paths = CorpusPaths(corpus_dir)
+    for subdir in (paths.download_dir, paths.json_dir, paths.final_md_dir, paths.report_dir, paths.log_dir):
+        subdir.mkdir(parents=True, exist_ok=True)
 
-    dest = corpus_dir / "scopus.csv"
-    if not dest.exists():
-        shutil.copy2(scopus_src, dest)
-        logging.info(f"Copied Scopus CSV to {dest}.")
+    if not paths.scopus_csv.exists():
+        shutil.copy2(scopus_src, paths.scopus_csv)
+        logging.info(f"Copied Scopus CSV to {paths.scopus_csv}.")
     else:
-        logging.warning(f"Scopus CSV already exists at {dest} — leaving it untouched.")
+        logging.warning(f"Scopus CSV already exists at {paths.scopus_csv} — leaving it untouched.")
 
-    if set_active:
-        secrets_path = _secrets_path()
-        if secrets_path.exists():
-            text = secrets_path.read_text(encoding="utf-8")
-            updated = re.sub(
-                r"^(CORPUS_NAME\s*=).*",
-                rf"\g<1>{name}",
-                text,
-                count=1,
-                flags=re.MULTILINE,
-            )
-            secrets_path.write_text(updated, encoding="utf-8")
-        else:
-            secrets_path.write_text(f"CORPUS_NAME={name}\n", encoding="utf-8")
-        logging.info(f"Set CORPUS_NAME={name} in {secrets_path}.")
-
+    logging.info(f"Corpus ready at {corpus_dir}.")
     return corpus_dir
 
 
@@ -155,25 +105,28 @@ def setup_logging(level=logging.INFO):
         logging.debug("Running programme in DEBUG mode.")
 
 def setup_run():
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    corpus = get_corpus()
+    corpus.log_dir.mkdir(parents=True, exist_ok=True)
+    corpus.report_dir.mkdir(parents=True, exist_ok=True)
+    corpus.download_dir.mkdir(parents=True, exist_ok=True)
 
-    if not SCOPUS_INPUT_CSV_NAME.exists():
+    if not corpus.scopus_csv.exists():
         raise FileNotFoundError(
-            f"No Scopus CSV found for corpus at {SCOPUS_INPUT_CSV_NAME}. "
+            f"No Scopus CSV found for corpus at {corpus.scopus_csv}. "
             f"Place your Scopus export there before running the pipeline."
         )
 
-    if not DB_CACHE_FILE_NAME.exists():
+    if not corpus.db.exists():
         logging.info("SETUP - No cache file found. Making a new one.")
-        create_database(db_path=DB_CACHE_FILE_NAME)
+        create_database(db_path=corpus.db)
 
-def clean_publications(folder: Path = DOWNLOAD_DIR, db_path: Path = DB_CACHE_FILE_NAME):
+def clean_publications(folder: Optional[Path] = None, db_path: Optional[Path] = None):
     """
     This function should be called at the beginning of main to make sure that no publications exists inside
-    'publication_dir' that are not saved within the cache.
+    'publication_dir' that are not saved within the cache. Defaults to the active corpus.
     """
+    folder = folder or get_corpus().download_dir
+    db_path = db_path or get_corpus().db
 
     logging.info("SETUP - Cleaning publications.")
     conn = sqlite3.connect(db_path)
@@ -185,7 +138,7 @@ def clean_publications(folder: Path = DOWNLOAD_DIR, db_path: Path = DB_CACHE_FIL
 
 
     # Store tracked paths in a set for faster lookup
-    tracked_files = {(CORPUS_DIR / row[0]).resolve() for row in cursor.fetchall()}
+    tracked_files = {(Path(db_path).parent / row[0]).resolve() for row in cursor.fetchall()}
     logging.debug(f"SETUP - Found {len(tracked_files)} publications stored in cache.")
     conn.close()
 

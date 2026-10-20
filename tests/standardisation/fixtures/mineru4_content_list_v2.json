@@ -1,0 +1,270 @@
+[
+ [
+  {
+   "type": "title",
+   "content": {
+    "title_content": [
+     {
+      "type": "text",
+      "content": "Two highly selected mutations in the tandemly duplicated CYP6P4a and CYP6P4b genes drive pyrethroid resistance in Anopheles funestus in West Africa"
+     }
+    ],
+    "level": 1
+   },
+   "bbox": [
+    90,
+    149,
+    881,
+    279
+   ]
+  },
+  {
+   "type": "page_header",
+   "content": {
+    "page_header_content": [
+     {
+      "type": "text",
+      "content": "Tatchou‑Nebangwa et al. BMC Biology (2024) 22:286 https://doi.org/10.1186/s12915-024-02081-y"
+     }
+    ]
+   },
+   "bbox": [
+    90,
+    39,
+    404,
+    66
+   ]
+  },
+  {
+   "type": "paragraph",
+   "content": {
+    "paragraph_content": [
+     {
+      "type": "text",
+      "content": "RESEARCH",
+      "style": [
+       "bold"
+      ]
+     }
+    ]
+   },
+   "bbox": [
+    100,
+    114,
+    220,
+    132
+   ]
+  },
+  {
+   "type": "image",
+   "content": {
+    "image_source": {
+     "path": "images/page_0_image_5.jpg"
+    },
+    "image_caption": [],
+    "image_footnote": []
+   },
+   "bbox": [
+    854,
+    138,
+    904,
+    176
+   ]
+  },
+  {
+   "type": "page_footnote",
+   "content": {
+    "page_footnote_content": [
+     {
+      "type": "text",
+      "content": "*Correspondence:"
+     }
+    ]
+   },
+   "bbox": [
+    92,
+    761,
+    191,
+    774
+   ]
+  },
+  {
+   "type": "page_footer",
+   "content": {
+    "page_footer_content": [
+     {
+      "type": "text",
+      "content": "BMC"
+     }
+    ]
+   },
+   "bbox": [
+    94,
+    851,
+    279,
+    889
+   ]
+  },
+  {
+   "type": "page_number",
+   "content": {
+    "page_number_content": [
+     {
+      "type": "text",
+      "content": "Page 2 of 24"
+     }
+    ]
+   },
+   "bbox": [
+    833,
+    40,
+    909,
+    55
+   ]
+  },
+  {
+   "type": "chart",
+   "content": {
+    "image_source": {
+     "path": "images/page_3_chart_10.jpg"
+    },
+    "content": "",
+    "chart_caption": [
+     {
+      "type": "text",
+      "content": "H"
+     },
+     {
+      "type": "text",
+      "content": "Fig. 1 Schematic representation of haplotypes and genetic diversity of CYP6P4a and CYP6P4b in resistant mosquitoes across Africa, FUMOZ, and FANG. A Phylogenetic tree for CYP6P4a plotted using the JTT model, showing selection of major alleles in all regions in 2021. B Haplotype network for CYP6P4a revealing a fixed haplotype common Southern Africa, a fixed haplotype common to Uganda and Cameroon, and major haplotypes in Ghana and Benin, but high diversity in FANG. C Schematic representation of haplotypes of CYP6P4a with mutations occurring in Ghana highlighted in red. D Phylogenetic tree for CYP6P4b plotted using the JTT model, showing selection of major alleles in all regions in 2021. E CYP6P4b haplotype network. A fixed haplotype is observed in Southern population (Malawi and FUMOZ) and the formation of a major haplotype common to Uganda and Cameroon. F Schematic representation of haplotypes of CYP6P4b with D284E mutation occurring in Ghana highlighted in red. G Plot of genetic diversity parameters of CYP6P4a and CYP6P4b across Africa showing the signatures of a directional selection of CYP6P4a and CYP6P4b between 2014 and 2021 in haplotype diversity (Hd) and nucleotide diversity (π)"
+     }
+    ],
+    "chart_footnote": []
+   },
+   "bbox": [
+    639,
+    565,
+    895,
+    730
+   ]
+  },
+  {
+   "type": "equation_interline",
+   "content": {
+    "math_content": "G = \\frac {\\mathsf {Z Z ^ {\\prime}}}{\\sum p (1 - p)}",
+    "math_type": "latex",
+    "image_source": {
+     "path": "images/page_21_equation_6.jpg"
+    }
+   },
+   "bbox": [
+    225,
+    652,
+    349,
+    687
+   ]
+  },
+  {
+   "type": "list",
+   "content": {
+    "list_type": "reference_list",
+    "list_items": [
+     {
+      "item_type": "text",
+      "item_content": [
+       {
+        "type": "text",
+        "content": "1. B. Liu, L. Xu, X. Ge, et al., “Effects of Mannan Oligosaccharide on the Physiological Responses, HSP70 Gene Expression and Disease Resistance of Allogynogenetic Crucian Carp (Carassius auratus Gibelio) Under Aeromonas hydrophila Infection,” Fish & Shellfish Immunology 34, no. 6 (2013): 1395–1403, "
+       },
+       {
+        "type": "hyperlink",
+        "content": "https://doi.org/10.1016/j.fsi.2013.02.028",
+        "url": "https://doi.org/10.1016/j.fsi.2013.02.028"
+       },
+       {
+        "type": "text",
+        "content": "."
+       }
+      ]
+     }
+    ]
+   },
+   "bbox": [
+    508,
+    856,
+    927,
+    932
+   ]
+  },
+  {
+   "type": "table",
+   "content": {
+    "image_source": {
+     "path": "images/page_2_table_8.jpg"
+    },
+    "table_caption": [
+     {
+      "type": "text",
+      "content": "TABLE 1     |     Oligonucleotide sequences used in this study."
+     }
+    ],
+    "table_footnote": [],
+    "html": "<table><tbody><tr><td>Primer</td><td>Sequences</td></tr><tr><td>β-Actin-F</td><td>CCCTGGCACCCAGCAC</td></tr><tr><td>β-Actin-R</td><td>GCCGATCCACACGGAG</td></tr><tr><td>SEMA5B-F</td><td>CGTGGCAGCCTATGATATTGG</td></tr><tr><td>SEMA5B-R</td><td>AGCTCGTTATAGTAGAAGGGGAC</td></tr><tr><td>AR-F-2564</td><td>GACGCTTCTACCAGCTCACC</td></tr><tr><td>AR-R-2726</td><td>GAAAGGATCTTGGGCACTTG</td></tr><tr><td>GAPDH-F</td><td>TCAACGACCACTTTGTCAAGC</td></tr><tr><td>GAPDH-R</td><td>TACTTTATTGATGGTACATGACAAGG</td></tr><tr><td>CHIP-1F</td><td>TACACTCCTGGTCCTGCCTAA</td></tr><tr><td>CHIP-1R</td><td>GTGTGTGCTGATGGGTCTGTA</td></tr><tr><td>CHIP-2F</td><td>ATTCTGTGTCTCTCACCGCC</td></tr><tr><td>CHIP-2R</td><td>AGCAGTGGTGTAATGCCCCTG</td></tr><tr><td>CHIP-3F</td><td>AGAGCTGTAGTCCCTGTTGC</td></tr><tr><td>CHIP-3R</td><td>AAGTAATCCCTGACTCCGTGC</td></tr></tbody></table>",
+    "table_type": "simple_table",
+    "table_nest_level": 1
+   },
+   "bbox": [
+    73,
+    608,
+    486,
+    932
+   ]
+  }
+ ],
+ [
+  {
+   "type": "paragraph",
+   "content": {
+    "paragraph_content": [
+     {
+      "type": "text",
+      "content": "The online version contains supplementary material available at "
+     },
+     {
+      "type": "hyperlink",
+      "content": "https://doi.org/10.1186/s12915-",
+      "url": "https://doi.org/10.1186/s12915-024-02081-y"
+     },
+     {
+      "type": "text",
+      "content": "​"
+     },
+     {
+      "type": "hyperlink",
+      "content": "024-",
+      "url": "https://doi.org/10.1186/s12915-024-02081-y"
+     },
+     {
+      "type": "text",
+      "content": "​"
+     },
+     {
+      "type": "hyperlink",
+      "content": "02081-y",
+      "url": "https://doi.org/10.1186/s12915-024-02081-y"
+     },
+     {
+      "type": "text",
+      "content": "."
+     }
+    ]
+   },
+   "bbox": [
+    91,
+    416,
+    475,
+    441
+   ]
+  }
+ ]
+]
