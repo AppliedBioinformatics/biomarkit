@@ -76,6 +76,20 @@ class TestGetPdfUrl:
 
         assert result == "https://example.com/paper.pdf"
 
+    def test_landing_page_only_is_not_returned_as_pdf_url(self, publications):
+        """Unpaywall's generic 'url' is often a doi.org landing page, which never triggers a download."""
+        client = _make_client(publications)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "best_oa_location": {"url_for_pdf": None, "url": "https://doi.org/10.3389/fpls.2022.994154"}
+        }
+        mock_resp.raise_for_status.return_value = None
+
+        with patch(f"{MODULE}.requests.get", return_value=mock_resp):
+            result = client._get_pdf_url("10.3389/fpls.2022.994154")
+
+        assert result is None
+
     def test_no_oa_location(self, publications):
         client = _make_client(publications)
         mock_resp = MagicMock()
