@@ -202,6 +202,7 @@ def transform_text(
     mineru_batch_size: int | None = None,
     generate_report: bool = False,
     cleanup_intermediates: bool = True,
+    xml_workers: int | None = None,
 ) -> list[Publication]:
     """
     Convert downloaded PDFs and XMLs into structured JSON content-list files.
@@ -231,6 +232,10 @@ def transform_text(
         model metadata, extracted images) are deleted from the intermediates folder
         after conversion, keeping only the *_content_list_v2.json files.
         Set to False to preserve all MinerU output for debugging.
+    xml_workers : int | None, default None
+        Number of processes used to parse Elsevier XMLs. None uses all CPU cores but one; 1 parses sequentially.
+        On Windows and macOS a script that calls transform_text() must do so under ``if __name__ == "__main__":``
+        because worker processes re-import the calling script.
 
     Returns
     -------
@@ -258,7 +263,7 @@ def transform_text(
     logging.info(f"Gathered {len(xmls_to_process)} .XML files to parse into JSON format.")
     logging.info(f"Gathered {len(pdfs_to_process)} .PDF files to parse into JSON format.")
 
-    ElsevierXmlTransformer(publication_list=xmls_to_process).transform_all()
+    ElsevierXmlTransformer(publication_list=xmls_to_process, max_workers=xml_workers).transform_all()
     MinerUPdfTransformer(
         publication_list=pdfs_to_process,
         mineru_tier=mineru_tier,

@@ -440,3 +440,74 @@ def test_extract_formula_display_plain_text():
 
 def test_extract_formula_empty_returns_empty():
     assert _extract_formula(ET.fromstring(f'<ce:formula xmlns:ce="{CE}"/>')) == ""
+
+
+# ---------------------------------------------------------------------------
+# ElsevierXmlTransformer.transform_all (serial and process pool)
+# ---------------------------------------------------------------------------
+
+def _xml_pubs_with_cache(tmp_path, xml_texts):
+    """Writes one XML per entry, inserts a cache row for each, and returns (publications, db_path)."""
+    from biomarkit.text_download.database.database import create_database, insert_row
+    db = tmp_path / "cache.sqlite"
+    create_database(db)
+    pubs = []
+    for i, text in enumerate(xml_texts):
+        xml_path = tmp_path / f"elsevier_{i:010d}.xml"
+        xml_path.write_text(text, encoding="utf-8")
+        doi = f"10.1016/test.{i}"
+        insert_row(doi=doi, downloaded_from="elsevier", publication_filepath=str(xml_path), db_path=db)
+        pubs.append(Publication(doi=doi, title=f"T{i}", publisher="elsevier", year=2020,
+                                publication_filepath=xml_path, document_type="XML"))
+    return pubs, db
+
+
+def _make_transformer(pubs, db, tmp_path, max_workers):
+    converter = ElsevierXmlTransformer(publication_list=pubs, max_workers=max_workers)
+    converter.cache = db
+    converter.output_dir = tmp_path / "out"
+    return converter
+
+
+def test_transform_all_serial_when_max_workers_1(tmp_path):
+    from biomarkit.text_download.database.database import get_row_for_doi
+    pubs, db = _xml_pubs_with_cache(tmp_path, [_article_xml(title="T0"), _article_xml(title="T1")])
+    _make_transformer(pubs, db, tmp_path, max_workers=1).transform_all()
+
+    for pub in pubs:
+        assert pub.content_json_filepath is not None
+        assert get_row_for_doi(pub.doi, db)["content_json_filepath"] is not None
+
+
+def test_transform_all_parallel_two_workers(tmp_path):
+    from biomarkit.text_download.database.database import get_row_for_doi
+    pubs, db = _xml_pubs_with_cache(tmp_path, [_article_xml(title="Good A"), "<unclosed>", _article_xml(title="Good B")])
+    _make_transformer(pubs, db, tmp_path, max_workers=2).transform_all()
+
+    for pub, title in ((pubs[0], "Good A"), (pubs[2], "Good B")):
+        assert pub.content_json_filepath is not None
+        assert title in pub.content_json_filepath.read_text(encoding="utf-8")
+        assert get_row_for_doi(pub.doi, db)["content_json_filepath"] is not None
+
+    assert pubs[1].content_json_filepath is None
+    assert get_row_for_doi(pubs[1].doi, db)["content_json_filepath"] is None
+
+
+def test_transform_all_parallel_skips_already_converted(tmp_path):
+    pubs, db = _xml_pubs_with_cache(tmp_path, [_article_xml(title="Done"), _article_xml(title="Todo")])
+    existing = tmp_path / "existing.json"
+    existing.write_text("[[]]", encoding="utf-8")
+    pubs[0].content_json_filepath = existing
+
+    converter = _make_transformer(pubs, db, tmp_path, max_workers=2)
+    converter.transform_all()
+
+    assert pubs[0].content_json_filepath == existing
+    assert not converter._build_output_path(pubs[0]).exists()
+    assert pubs[1].content_json_filepath is not None
+
+
+def test_default_max_workers_min_one(monkeypatch):
+    import os
+    monkeypatch.setattr(os, "cpu_count", lambda: 1)
+    assert ElsevierXmlTransformer(publication_list=[]).max_workers == 1

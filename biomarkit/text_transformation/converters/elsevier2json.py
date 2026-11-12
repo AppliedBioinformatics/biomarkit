@@ -7,13 +7,18 @@ the text-transformation pipeline.
 import functools
 import json
 import logging
+import os
 import re
 import xml.etree.ElementTree as ET
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from html import escape as html_escape
 from pathlib import Path
 from typing import List, Optional
 
+from tqdm import tqdm
+
 from biomarkit.text_download.basemodels.publication import Publication
+from biomarkit.text_download.utils.generics import progress_split_bar
 from biomarkit.text_transformation.converters.ABC.transformer import Transformer
 
 
@@ -746,6 +751,17 @@ def parse_elsevier_xml_to_blocks(xml_path: str) -> list:
     return [blocks]
 
 
+def _xml_to_json_file(xml_path: str, out_path: str) -> str:
+    """
+    Parses one XML file and writes its content list JSON. Module-level and string-only so it can run in a worker
+    process; it must not touch the active corpus (get_corpus() is not set in child processes).
+    """
+    out = Path(out_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(parse_elsevier_xml_to_blocks(xml_path), ensure_ascii=False), encoding="utf-8")
+    return out_path
+
+
 # ---------------------------------------------------------------------------
 # Converter class
 # ---------------------------------------------------------------------------
@@ -753,8 +769,44 @@ def parse_elsevier_xml_to_blocks(xml_path: str) -> list:
 class ElsevierXmlTransformer(Transformer):
     """
     Converts Elsevier full-text XML publications to content_list_v2.json format.
-    Inherits iteration, caching, and error handling from Converter.
+    Inherits iteration, caching, and error handling from Converter. With max_workers > 1, files are parsed in a
+    process pool; results and cache writes are handled in the parent process.
     """
+
+    def __init__(self, publication_list: List[Publication], max_workers: int | None = None):
+        super().__init__(publication_list)
+        self.max_workers = max_workers or max(1, (os.cpu_count() or 2) - 1)
+
+    def transform_all(self) -> None:
+        if self.max_workers <= 1:
+            return super().transform_all()
+
+        total = len(self.publication_list)
+        pending = [p for p in self.publication_list if p.content_json_filepath is None]
+        passed, failed = total - len(pending), 0
+        logging.info(f"{self.__class__.__name__} starting transformation of {total} publication(s) "
+                     f"with {self.max_workers} worker processes.")
+
+        with ProcessPoolExecutor(max_workers=self.max_workers) as pool, \
+                tqdm(total=total, initial=passed, desc=self.__class__.__name__, unit="pub",
+                     leave=True, dynamic_ncols=True) as bar:
+            futures = {
+                pool.submit(_xml_to_json_file, str(p.publication_filepath), str(self._build_output_path(p))): p
+                for p in pending
+            }
+            for future in as_completed(futures):
+                pub = futures[future]
+                try:
+                    pub.content_json_filepath = Path(future.result())
+                    self._cache_result(pub)
+                    passed += 1
+                except Exception as e:
+                    logging.warning(f"Transformation failed for {pub.doi}: {e} — skipping.")
+                    failed += 1
+                bar.update(1)
+                bar.set_postfix_str(progress_split_bar(passed, failed, total))
+
+        logging.info(f"{self.__class__.__name__} finished — {passed} succeeded, {failed} failed.")
 
     def transform2json(self, pub: Publication) -> Path | None:
         """
@@ -769,12 +821,7 @@ class ElsevierXmlTransformer(Transformer):
         -------
         Path to the written JSON file, or None if conversion failed.
         """
-        output_path = self._build_output_path(pub)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-
-        blocks = parse_elsevier_xml_to_blocks(str(pub.publication_filepath))
-        output_path.write_text(json.dumps(blocks, ensure_ascii=False), encoding="utf-8")
-
+        output_path = Path(_xml_to_json_file(str(pub.publication_filepath), str(self._build_output_path(pub))))
         logging.debug(f"Elsevier XML converted for {pub.doi} → {output_path}")
         return output_path
 
