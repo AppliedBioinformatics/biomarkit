@@ -27,8 +27,9 @@ class PublisherApi(ABC):
     name: str
     publication_list: List[Publication]
     timeout: int
-    # Politeness pause between papers (seconds), separate from the HTTP request timeout.
-    rate_limit_delay: float = 1.0
+    # Politeness pause between papers (seconds), separate from the HTTP request timeout. Clients override it to
+    # stay within each publisher's limits.
+    rate_limit_delay: float = 10.0
 
     def __init__(self, name, publication_list, timeout: int = 10):
         self.name = name
@@ -264,13 +265,17 @@ class PublisherApi(ABC):
         """
         pass
 
+    def _pace(self, index: int) -> None:
+        """Waits rate_limit_delay before every paper except the first."""
+        if index:
+            time.sleep(self.rate_limit_delay)
+
     def _download_one(self, index: int, p: Publication) -> bool:
         """
         Attempts a single publication: waits rate_limit_delay (except before the first paper), downloads, and caches
         on success. Returns True if the paper was downloaded.
         """
-        if index:
-            time.sleep(self.rate_limit_delay)
+        self._pace(index)
         self.logger.debug(f"Attempting to download: {p.doi}.")
         filepath = self.download_paper(doi=p.doi)
 

@@ -15,6 +15,8 @@ class ElsevierClient(PublisherApi):
         super().__init__(name="elsevier", publication_list=publication_list)
         self.api_key = API_KEY_TO_NAME[self.name]
         self.timeout = 10
+        # Article Retrieval API allows 10 requests/s and 50,000/week per key.
+        self.rate_limit_delay = 1
         self.request_headers = {"X-ELS-APIKey": self.api_key, "Accept": "application/xml"}
 
         for p in self.publication_list:

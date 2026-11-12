@@ -296,8 +296,11 @@ Other changes in this release need no code change:
   `1` for the old sequential behaviour. On Windows and macOS, call `transform_text()` under
   `if __name__ == "__main__":` because the XML workers are separate processes.
 - `standardise_text(force_imrad_structure=False)` no longer requires a reachable Ollama endpoint.
-- Download clients pause `rate_limit_delay` seconds between papers (1 s; Wiley 10 s) instead of their HTTP
-  timeout, and the open-access phase runs 4 downloads at once. Expect shorter download runs.
+- Download clients pause `rate_limit_delay` seconds between papers instead of using their HTTP timeout as the
+  pause. Elsevier and the open-access/Unpaywall phase now start one paper per second (previously 10 s and 1 s),
+  Springer 5 s (previously 10 s); all other clients keep their previous pause (Wiley, Taylor & Francis, APS,
+  Copernicus 10 s, Frontiers 5 s, MDPI 1 s). The open-access phase overlaps up to 4 downloads but still starts at
+  most one per second.
 - Responses that are not a PDF (or XML for Elsevier) are no longer saved, so fewer bogus "downloads" reach MinerU.
 - Cached file paths that no longer exist on disk are logged and treated as missing instead of being trusted.
 - New command-line entry point: `biomarkit <corpus> [options]` (see `biomarkit --help`). `python -m

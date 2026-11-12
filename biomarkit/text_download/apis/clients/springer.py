@@ -17,6 +17,7 @@ class SpringerClient(PublisherApi):
     def __init__(self, publication_list: list):
         super().__init__(name="springer", publication_list=publication_list)
         self.timeout = 10
+        self.rate_limit_delay = 5
         # Springer's bot detection rejects the browser-spoofing default_headers;
         # a plain requests call (no custom headers) returns the PDF correctly.
         self.request_headers = {}

@@ -1,4 +1,6 @@
 import re
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from ..abc.publisher_api import PublisherApi
 from pathlib import Path
@@ -28,13 +30,17 @@ class OpenSourceClient(PublisherApi):
 
     chemrxiv_api_url = "https://www.cambridge.org/engage/coe/public-api/v1/items/doi"
 
-    # Papers attempted concurrently. Each worker still waits rate_limit_delay between its papers.
+    # Papers attempted concurrently. New papers still start at most once per rate_limit_delay across all workers,
+    # so Unpaywall sees no more than one lookup per second; the workers only overlap slow downloads.
     max_workers = 4
+    rate_limit_delay = 1.0
 
     # === Inherits from PublicationApi Class ===
     def __init__(self, publication_list: list):
         super().__init__(name="opensource", publication_list=publication_list)
         self.timeout = 30
+        self._pace_lock = threading.Lock()
+        self._next_start = 0.0
         # Same bot-detection issue as SpringerClient: the browser-spoofing default_headers
         # cause publisher sites (BioMedCentral, Springer, etc.) to return HTML instead of PDFs.
         self.request_headers = {}
@@ -218,6 +224,14 @@ class OpenSourceClient(PublisherApi):
         return filepath
 
     # === These methods are inherited from PublicationApi and should be overwritten. ===
+    def _pace(self, index: int) -> None:
+        """Shared across worker threads: paper starts are spaced at least rate_limit_delay apart."""
+        with self._pace_lock:
+            wait = self._next_start - time.monotonic()
+            if wait > 0:
+                time.sleep(wait)
+            self._next_start = time.monotonic() + self.rate_limit_delay
+
     def download_all_papers(self) -> None:
         """
         Thread-pooled version of PublisherApi.download_all_papers(). Only this client is parallelised: it covers every

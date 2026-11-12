@@ -31,7 +31,7 @@ def test___init__sets_attributes(publications, active_corpus):
     assert api.api_url == "https://api.unpaywall.org"
     assert api.api_key == "fake-key"
     assert api.timeout == 10
-    assert api.rate_limit_delay == 1.0
+    assert api.rate_limit_delay == 10.0
 
 def test__setup_logger_follows_active_corpus(tmp_path):
     import logging

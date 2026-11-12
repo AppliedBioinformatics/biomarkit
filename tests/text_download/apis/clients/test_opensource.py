@@ -322,3 +322,22 @@ def test_download_all_papers_uses_thread_pool(publications):
         api.download_all_papers()
 
     mock_pool.assert_called_once_with(max_workers=4)
+
+def test_workers_start_papers_at_most_once_per_rate_limit_delay(publications):
+    import time
+    api = OpenSourceClient(publication_list=publications)
+    api.rate_limit_delay = 0.2
+    starts = []
+
+    def fake_download(doi):
+        starts.append(time.monotonic())
+        time.sleep(0.5)  # slow download, so several workers overlap
+        return None
+
+    with patch.object(api, "download_paper", side_effect=fake_download):
+        api.download_all_papers()
+
+    starts.sort()
+    gaps = [b - a for a, b in zip(starts, starts[1:])]
+    assert len(starts) == len(publications)
+    assert all(g >= 0.19 for g in gaps), gaps
