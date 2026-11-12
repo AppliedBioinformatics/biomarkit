@@ -112,13 +112,14 @@ Add the new client to the router map in `biomarkit/text_download/apis/map.py`:
 
 ```python
 # biomarkit/text_download/apis/map.py
-from biomarkit.text_download.apis.clients.my_publisher import MyPublisherClient
-
-api_clients = {
+_CLIENT_PATHS = {
     ...
-    "my_publisher": MyPublisherClient,
+    "my_publisher": ("biomarkit.text_download.apis.clients.my_publisher", "MyPublisherClient"),
 }
 ```
+
+Clients are imported lazily the first time `api_clients` is accessed, so give the module path and class name
+rather than importing the class.
 
 ### Step 4 — Map publisher name variants
 

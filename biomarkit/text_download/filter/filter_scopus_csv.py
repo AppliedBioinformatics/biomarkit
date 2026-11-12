@@ -109,7 +109,7 @@ def synchronise_publishers(df: pd.DataFrame,
     -------
     pd.DataFrame
     """
-    from biomarkit.text_download.apis.map import api_clients
+    from biomarkit.text_download.apis.map import API_CLIENT_NAMES
 
     df = df.copy()
     logging.debug("Attempting to synchronise publishers.")
@@ -117,7 +117,7 @@ def synchronise_publishers(df: pd.DataFrame,
     df["PublisherGroup"] = df[column].map(reverse_map).fillna(df[column])
 
     if infer_from_doi:
-        unrouted = ~df["PublisherGroup"].isin(api_clients)
+        unrouted = ~df["PublisherGroup"].isin(API_CLIENT_NAMES)
         inferred = df.loc[unrouted, "DOI"].map(infer_publisher_from_doi).dropna()
         if not inferred.empty:
             had_none = int(df.loc[inferred.index, column].isna().sum())

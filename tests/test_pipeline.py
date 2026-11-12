@@ -334,3 +334,17 @@ def test_standardise_text_raises_when_imrad_on_and_llm_unavailable():
             patch("biomarkit.standardisation.text_cleaning.cleaner.Cleaner"):
         with pytest.raises(RuntimeError):
             standardise_text([], force_imrad_structure=True)
+
+
+def test_load_corpus_does_not_import_plotly_or_playwright(tmp_path):
+    import subprocess
+    import sys
+    csv = tmp_path / "scopus.csv"
+    _write_scopus_csv(csv, [{"doi": "10.1000/aaa", "title": "Paper A", "publisher": "Elsevier", "year": 2021}])
+    code = (
+        "import sys, biomarkit; "
+        f"biomarkit.load_corpus(r'{tmp_path / 'corpus'}', scopus_file=r'{csv}', build=True); "
+        "print('plotly' in sys.modules, 'playwright' in sys.modules)"
+    )
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    assert result.stdout.strip().splitlines()[-1] == "False False"

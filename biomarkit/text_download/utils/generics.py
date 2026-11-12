@@ -1,11 +1,11 @@
-﻿import logging
+﻿from __future__ import annotations
+import logging
 import sqlite3
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 from pydantic import FilePath
-from plotly import graph_objects as go, io as pio
 from collections import defaultdict
 from tqdm import tqdm
 from biomarkit.text_download.basemodels.publication import Publication
@@ -170,6 +170,8 @@ def build_plotly_report(figures: List[go.Figure], output_file: str, title: Optio
     Returns:
         str: The complete HTML string of the report.
     """
+
+    from plotly import io as pio
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     html_figures = ""
