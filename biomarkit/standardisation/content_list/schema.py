@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Annotated, Any, Literal, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, TypeAdapter
 
 # Inline / leaf content types (nested inside block content arrays)
 class TextSpan(BaseModel):
@@ -200,16 +200,19 @@ _KNOWN_BLOCK_TYPES = Annotated[
 
 ContentBlock = Union[_KNOWN_BLOCK_TYPES, MiscBlock]
 
+_KNOWN_TYPES = frozenset({
+    "paragraph", "title", "image", "table", "chart", "list",
+    "equation_interline", "page_header", "page_footer",
+    "page_footnote", "page_number",
+})
+
+# Built once: constructing a TypeAdapter compiles its validation schema, which is expensive to repeat per block.
+_BLOCK_ADAPTER = TypeAdapter(_KNOWN_BLOCK_TYPES)
+
 
 def _parse_block(raw: dict) -> ContentBlock:
-    known = {
-        "paragraph", "title", "image", "table", "chart", "list",
-        "equation_interline", "page_header", "page_footer",
-        "page_footnote", "page_number",
-    }
-    if raw.get("type") in known:
-        from pydantic import TypeAdapter
-        return TypeAdapter(_KNOWN_BLOCK_TYPES).validate_python(raw)
+    if raw.get("type") in _KNOWN_TYPES:
+        return _BLOCK_ADAPTER.validate_python(raw)
     return MiscBlock.model_validate(raw)
 
 
@@ -225,7 +228,8 @@ class Document(BaseModel):
     def from_file(cls, path: Path) -> Document:
         raw: list[list[dict]] = json.loads(path.read_text(encoding="utf-8"))
         pages = [[_parse_block(block) for block in page] for page in raw]
-        return cls(pages=pages)
+        # Blocks are already validated above, so skip re-validating them.
+        return cls.model_construct(pages=pages)
 
     def blocks(self) -> list[ContentBlock]:
         """Flat list of all blocks across all pages."""

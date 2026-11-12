@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -37,6 +38,14 @@ _RESULTS_AND_DISCUSSION_RE = re.compile(r'^results\s+(?:and|&)\s+discussion\b')
 _DISCUSSION_RE = re.compile(
     r'^(discussion|conclusions?\s+and\s+discussion|discussion\s+and\s+conclusions?)\b'
 )
+# Back-matter headings that mark the end of the core text. Ethics statements are deliberately excluded because
+# they are often a Methods subsection.
+_END_RE = re.compile(
+    r'^(references|bibliography|literature\s+cited|acknowledge?ments?|funding'
+    r'|supplementary\s+(?:materials?|information|data)|data\s+availability'
+    r'|conflicts?\s+of\s+interests?|declaration\s+of\s+competing\s+interests?|competing\s+interests?'
+    r'|author\s+contributions?|abbreviations|appendix|appendices)\b'
+)
 
 
 class Cleaner:
@@ -45,9 +54,12 @@ class Cleaner:
         publications: List[Publication],
         context: Dict,
         cache: Optional[Path] = None,
+        max_workers: int = 4,
     ):
         self.publications = publications
         self.cache = cache
+        self.max_workers = max_workers
+        self._llm: Optional[LlamaClassifier] = None
         self.keep_figures = context["keep_figures"]
         self.keep_tables = context["keep_tables"]
         self.keep_latex = context["keep_latex"]
@@ -56,6 +68,13 @@ class Cleaner:
 
     def _truncate_core_text(self, blocks):
         pass
+
+    @property
+    def _classifier(self) -> LlamaClassifier:
+        """One LLM client per Cleaner, created on first use."""
+        if self._llm is None:
+            self._llm = LlamaClassifier()
+        return self._llm
 
     # --- Shared heading helpers ---
 
@@ -88,6 +107,10 @@ class Cleaner:
     @staticmethod
     def _is_discussion_heading(block: TitleBlock) -> bool:
         return bool(_DISCUSSION_RE.match(Cleaner._normalise_heading(block)))
+
+    @staticmethod
+    def _is_end_heading(block: TitleBlock) -> bool:
+        return bool(_END_RE.match(Cleaner._normalise_heading(block)))
 
     # --- Block insertion helpers (introduction only — other sections never insert) ---
 
@@ -192,7 +215,7 @@ class Cleaner:
             logging.warning("[Cleaner] find_introduction_start: no headings or paragraphs found")
             return blocks
 
-        intro_index = LlamaClassifier().classify_intro(blocks_context)
+        intro_index = self._classifier.classify_intro(blocks_context)
         if intro_index is not None:
             logging.debug("[Cleaner] Introduction found via LLM at block index %d", intro_index)
             return self._insert_intro_heading(blocks, intro_index)
@@ -206,26 +229,30 @@ class Cleaner:
             logging.warning("[Cleaner] find_core_text_end: no headings found")
             return blocks
 
-        # The end must come after the Introduction (or Methods at the earliest).
-        # Find the minimum acceptable index to guard against the LLM picking front-matter.
+        # The end must come after the Introduction, to guard against picking front-matter. Methods does not raise
+        # the floor because some journals place it after the Discussion.
         intro_position = next(
             (i for i, b in enumerate(blocks)
              if isinstance(b, TitleBlock) and b.content.text == "Introduction"),
             None,
         )
-        methods_position = next(
+        min_end = intro_position if intro_position is not None else 0
+
+        end_regex_index = next(
             (i for i, b in enumerate(blocks)
-             if isinstance(b, TitleBlock) and self._is_methods_heading(b)),
+             if i > min_end and isinstance(b, TitleBlock) and self._is_end_heading(b)),
             None,
         )
-        min_end = max(p for p in (intro_position, methods_position) if p is not None) if (intro_position or methods_position) else 0
+        if end_regex_index is not None:
+            logging.debug("[Cleaner] Core text end found via regex at block index %d", end_regex_index)
+            return self._insert_end_marker(blocks, end_regex_index)
 
-        end_index = LlamaClassifier().classify_end(blocks_context)
+        end_index = self._classifier.classify_end(blocks_context)
         if end_index is not None:
             if end_index <= min_end:
                 logging.warning(
                     "[Cleaner] find_core_text_end: LLM returned index %d which is before or at "
-                    "Introduction/Methods (position %d) — ignoring and keeping full block list",
+                    "Introduction (position %d) — ignoring and keeping full block list",
                     end_index, min_end,
                 )
                 return blocks
@@ -247,7 +274,7 @@ class Cleaner:
                 methods_found = True
                 break
         if not methods_found and headings_context:
-            idx = LlamaClassifier().classify_methods(headings_context)
+            idx = self._classifier.classify_methods(headings_context)
             if idx is not None and isinstance(blocks[idx], TitleBlock):
                 logging.debug("[Cleaner] Methods heading found via LLM at block index %d", idx)
                 self._rename_heading(blocks[idx], "Methods")
@@ -272,7 +299,7 @@ class Cleaner:
                 results_found = True
                 break
         if not results_found and headings_context:
-            idx = LlamaClassifier().classify_results(headings_context)
+            idx = self._classifier.classify_results(headings_context)
             if idx is not None and isinstance(blocks[idx], TitleBlock):
                 logging.debug("[Cleaner] Results heading found via LLM at block index %d", idx)
                 self._rename_heading(blocks[idx], "Results")
@@ -289,7 +316,7 @@ class Cleaner:
                     discussion_found = True
                     break
             if not discussion_found and headings_context:
-                idx = LlamaClassifier().classify_discussion(headings_context)
+                idx = self._classifier.classify_discussion(headings_context)
                 if idx is not None and isinstance(blocks[idx], TitleBlock):
                     logging.debug("[Cleaner] Discussion heading found via LLM at block index %d", idx)
                     self._rename_heading(blocks[idx], "Discussion")
@@ -379,18 +406,26 @@ class Cleaner:
         """
         total = len(self.publications)
         success, failed = 0, 0
-        with tqdm(self.publications, desc="Standardising", unit="pub",
-                  leave=True, dynamic_ncols=True) as bar:
-            for publication in bar:
+
+        # Build the shared LLM client before the workers start so they don't race to create it.
+        if self.force_imrad_structure:
+            _ = self._classifier
+
+        with tqdm(total=total, desc="Standardising", unit="pub", leave=True, dynamic_ncols=True) as bar, \
+                ThreadPoolExecutor(max_workers=self.max_workers) as pool:
+            futures = {pool.submit(self.clean_from_json, publication): publication
+                       for publication in self.publications}
+            for future in as_completed(futures):
+                publication = futures[future]
                 try:
-                    self.clean_from_json(pub=publication)
+                    future.result()
                 except Exception as e:
                     failed += 1
                     bar.write(f"[WARN] skipped {publication.doi}: {e}")
-                    bar.set_postfix_str(progress_split_bar(success, failed, total))
-                    continue
-                if publication.final_md_filepath is not None:
-                    success += 1
                 else:
-                    failed += 1
+                    if publication.final_md_filepath is not None:
+                        success += 1
+                    else:
+                        failed += 1
+                bar.update(1)
                 bar.set_postfix_str(progress_split_bar(success, failed, total))

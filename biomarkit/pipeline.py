@@ -284,6 +284,7 @@ def standardise_text(
     keep_latex: bool = False,
     keep_references: bool = False,
     force_imrad_structure: bool = True,
+    max_workers: int = 4,
 ) -> list[Publication]:
     """
     Clean and standardise JSON content-list files into final Markdown outputs.
@@ -313,6 +314,9 @@ def standardise_text(
         When True, section headings are normalised to Introduction / Methods /
         Results / Discussion using regex matching with an LLM fallback. Paper boilerplate sections are parsed to a
         classifier to decide whether to remove each section.
+    max_workers : int, default 4
+        Number of publications standardised concurrently. Mostly useful when the LLM fallback is in use, since
+        Ollama can serve several requests at once. Set to 1 for strictly sequential processing.
 
     Returns
     -------
@@ -325,9 +329,8 @@ def standardise_text(
     from biomarkit.standardisation.generics import prepare_standardisation
     from biomarkit.standardisation.text_cleaning.cleaner import Cleaner
 
-    llm_available = prepare_standardisation()
- 
-    if not llm_available and force_imrad_structure:
+    # The LLM is only used for IMRAD restructuring, so only check the endpoint when that is on.
+    if force_imrad_structure and not prepare_standardisation():
         raise RuntimeError(
             "Ollama endpoint is not reachable or the configured model is not installed. "
             "The LLM is required for force_imrad_structure=True to classify headings that "
@@ -352,7 +355,8 @@ def standardise_text(
     cleaner = Cleaner(
         publications=publications,
         cache=get_corpus().db,
-        context=context
+        context=context,
+        max_workers=max_workers,
     )
     cleaner.clean_all()
 

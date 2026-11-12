@@ -30,13 +30,13 @@ def make_title(text: str, level: int = 1) -> TitleBlock:
     )
 
 
-def make_cleaner(**ctx_overrides) -> Cleaner:
+def make_cleaner(max_workers: int = 1, **ctx_overrides) -> Cleaner:
     context = dict(
         keep_figures=False, keep_tables=False, keep_latex=False,
         keep_references=False, force_imrad_structure=False,
     )
     context.update(ctx_overrides)
-    return Cleaner(publications=[], context=context, cache=None)
+    return Cleaner(publications=[], context=context, cache=None, max_workers=max_workers)
 
 
 # ---------------------------------------------------------------------------
@@ -407,6 +407,37 @@ def test_clean_all_calls_clean_from_json_for_each_pub(tmp_path):
     assert mock_clean.call_count == 2
 
 
+def test_clean_all_parallel_processes_all_pubs(tmp_path):
+    pubs = []
+    for name in ("pub1", "pub2", "pub3"):
+        folder = tmp_path / name
+        folder.mkdir()
+        pubs.append(_write_pub(folder))
+    # Third publication fails: its JSON is missing. It must not stop the others.
+    pubs[2].content_json_filepath.unlink()
+
+    cleaner = make_cleaner(max_workers=2, force_imrad_structure=False)
+    cleaner.publications = pubs
+    cleaner.clean_all()
+
+    assert pubs[0].final_md_filepath is not None and pubs[0].final_md_filepath.exists()
+    assert pubs[1].final_md_filepath is not None and pubs[1].final_md_filepath.exists()
+    assert pubs[2].final_md_filepath is None
+
+
+def test_classifier_is_constructed_once():
+    cleaner = make_cleaner()
+    blocks = [make_paragraph("no intro heading"), make_paragraph("body")]
+    mock_instance = MagicMock()
+    mock_instance.classify_intro.return_value = None
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier",
+               return_value=mock_instance) as mock_llm:
+        cleaner._find_introduction_start(blocks)
+        cleaner._find_introduction_start(blocks)
+    mock_llm.assert_called_once()
+    assert mock_instance.classify_intro.call_count == 2
+
+
 def test_clean_from_json_updates_cache(tmp_path):
     import sqlite3
     from biomarkit.text_download.database.database import create_database
@@ -437,15 +468,80 @@ def test_clean_from_json_updates_cache(tmp_path):
 # _find_core_text_end
 # ---------------------------------------------------------------------------
 
-def test_find_core_text_end_inserts_end_marker_via_llm():
+def test_find_core_text_end_inserts_end_marker_via_regex_no_llm():
     cleaner = make_cleaner()
     blocks = [make_title("Introduction"), make_paragraph("body"), make_title("References")]
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier") as mock_llm:
+        result = cleaner._find_core_text_end(blocks)
+    mock_llm.assert_not_called()
+    titles = [b.content.title_content[0].content for b in result if b.type == "title"]
+    assert "end" in titles
+
+
+def test_find_core_text_end_inserts_end_marker_via_llm():
+    cleaner = make_cleaner()
+    blocks = [make_title("Introduction"), make_paragraph("body"), make_title("Publisher's Note")]
     mock_instance = MagicMock()
     mock_instance.classify_end.return_value = 2
     with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
         result = cleaner._find_core_text_end(blocks)
+    mock_instance.classify_end.assert_called_once()
     titles = [b.content.title_content[0].content for b in result if b.type == "title"]
     assert "end" in titles
+
+
+def test_find_core_text_end_regex_skips_back_matter_before_introduction():
+    cleaner = make_cleaner()
+    blocks = [
+        make_title("Abbreviations"),
+        make_title("Introduction"),
+        make_paragraph("body"),
+        make_title("References"),
+        make_paragraph("ref list"),
+    ]
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier") as mock_llm:
+        result = cleaner._find_core_text_end(blocks)
+    mock_llm.assert_not_called()
+    titles = [b.content.title_content[0].content for b in result if b.type == "title"]
+    assert titles == ["Abbreviations", "Introduction", "end"]
+
+
+@pytest.mark.parametrize("text", [
+    "References", "5. References", "Literature Cited", "Acknowledgements", "Acknowledgments",
+    "Funding", "Supplementary Material", "Supplementary Information", "Data Availability Statement",
+    "Conflicts of Interest", "Declaration of Competing Interest", "Competing interests",
+    "Author Contributions", "Abbreviations", "Appendix A", "Appendices",
+])
+def test_is_end_heading_matches(text):
+    assert Cleaner._is_end_heading(make_title(text))
+
+
+@pytest.mark.parametrize("text", ["Results", "Discussion", "Methods", "Introduction", "Ethics approval"])
+def test_is_end_heading_no_match(text):
+    assert not Cleaner._is_end_heading(make_title(text))
+
+
+@pytest.mark.parametrize("llm_index, accepted", [(6, True), (0, False)])
+def test_find_core_text_end_methods_last_accepts_index_after_discussion(llm_index, accepted):
+    # STAR Methods style: Methods comes after Discussion, so it must not raise the minimum end index.
+    cleaner = make_cleaner()
+    blocks = [
+        make_title("Introduction"),      # 0
+        make_paragraph("i"),             # 1
+        make_title("Results"),           # 2
+        make_paragraph("r"),             # 3
+        make_title("Discussion"),        # 4
+        make_paragraph("d"),             # 5
+        make_title("Publisher's Note"),  # 6
+        make_title("STAR Methods"),      # 7
+        make_paragraph("m"),             # 8
+    ]
+    mock_instance = MagicMock()
+    mock_instance.classify_end.return_value = llm_index
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
+        result = cleaner._find_core_text_end(blocks)
+    titles = [b.content.title_content[0].content for b in result if b.type == "title"]
+    assert ("end" in titles) is accepted
 
 
 def test_find_core_text_end_llm_returns_none_logs_warning(caplog):
@@ -488,7 +584,7 @@ def test_find_core_text_end_rejects_index_before_introduction(caplog):
         with caplog.at_level("WARNING"):
             result = cleaner._find_core_text_end(blocks)
     assert result == blocks
-    assert "before or at Introduction/Methods" in caplog.text
+    assert "before or at Introduction" in caplog.text
     titles = [b.content.title_content[0].content for b in result if b.type == "title"]
     assert "end" not in titles
 
@@ -507,22 +603,21 @@ def test_find_core_text_end_rejects_index_equal_to_introduction(caplog):
         with caplog.at_level("WARNING"):
             result = cleaner._find_core_text_end(blocks)
     assert result == blocks
-    assert "before or at Introduction/Methods" in caplog.text
+    assert "before or at Introduction" in caplog.text
 
 
 def test_find_core_text_end_accepts_index_after_methods_when_no_introduction(caplog):
-    # No Introduction heading present — Methods acts as the minimum anchor.
-    # An end index after Methods should be accepted normally.
+    # No Introduction heading present — an end index after Methods should be accepted normally.
     cleaner = make_cleaner()
     blocks = [
         make_title("Methods"),
         make_paragraph("methods text"),
         make_title("Results"),
         make_paragraph("results text"),
-        make_title("Acknowledgments"),
+        make_title("Publisher's Note"),
     ]
     mock_instance = MagicMock()
-    mock_instance.classify_end.return_value = 4  # Acknowledgments — after Methods
+    mock_instance.classify_end.return_value = 4  # Publisher's Note — after Methods
     with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
         result = cleaner._find_core_text_end(blocks)
     titles = [b.content.title_content[0].content for b in result if b.type == "title"]
