@@ -2,7 +2,7 @@
 from biomarkit.config import TMP_DIR
 from biomarkit.text_download.controller.controller import Controller
 from biomarkit.text_download.basemodels.publication import Publication
-from biomarkit.text_download.database.database import insert_row
+from biomarkit.text_download.database.database import insert_row, create_database
 
 # Fixtures.
 @pytest.fixture
@@ -48,16 +48,19 @@ def test__check_publications(publications):
     with pytest.raises(AssertionError):
         assert controller._check_publications()
 
-def test__update_publication_cache_state(publications, tmp_path):
-    controller = Controller(publication_list=publications)
-    controller.cache = TMP_DIR / "tests_tmp/test.sqlite"
-    tmp_db_path = TMP_DIR / "tests_tmp/test.sqlite"
+@pytest.fixture
+def cached_db(tmp_path):
+    """SQLite cache with rows for the first two publications, both pointing at files that exist."""
+    db = tmp_path / "test.sqlite"
+    create_database(db)
+    for doi, name in (("10.1037/arc14", "Testfile1"), ("10.1037/arc15", "Testfile2")):
+        (tmp_path / name).touch()
+        insert_row(doi=doi, downloaded_from="TestPublisher", publication_filepath=str(tmp_path / name), db_path=db)
+    return db
 
-    # Add filepaths for the publications to the database.
-    insert_row(doi ="10.1037/arc14", downloaded_from="TestPublisher", publication_filepath=str(tmp_path / "Testfile1"),
-               db_path=tmp_db_path)
-    insert_row(doi="10.1037/arc15", downloaded_from="TestPublisher", publication_filepath=str(tmp_path / "Testfile2"),
-               db_path=tmp_db_path)
+def test__update_publication_cache_state(publications, cached_db):
+    controller = Controller(publication_list=publications)
+    controller.cache = cached_db
 
     controller._update_publications_cache_state()
 
@@ -67,9 +70,21 @@ def test__update_publication_cache_state(publications, tmp_path):
     assert publications[1].is_cached == True
     assert publications[2].is_cached == False
 
-def test_prepare_publications_for_router(publications):
+def test__update_publication_cache_state_missing_file_leaves_none(publications, cached_db, tmp_path, caplog):
+    (tmp_path / "Testfile2").unlink()
     controller = Controller(publication_list=publications)
-    controller.cache = TMP_DIR / "tests_tmp/test.sqlite"
+    controller.cache = cached_db
+
+    with caplog.at_level("WARNING"):
+        controller._update_publications_cache_state()
+
+    assert publications[0].is_cached
+    assert publications[1].publication_filepath is None
+    assert "not found on disk" in caplog.text
+
+def test_prepare_publications_for_router(publications, cached_db):
+    controller = Controller(publication_list=publications)
+    controller.cache = cached_db
     controller.prepare_publications_for_router()
 
     assert len(controller.cached_publications) == 2

@@ -31,6 +31,7 @@ def test___init__sets_attributes(publications, active_corpus):
     assert api.api_url == "https://api.unpaywall.org"
     assert api.api_key == "fake-key"
     assert api.timeout == 10
+    assert api.rate_limit_delay == 1.0
 
 def test__setup_logger_follows_active_corpus(tmp_path):
     import logging
@@ -58,7 +59,7 @@ def test__test_url_success():
     with patch("biomarkit.text_download.apis.abc.publisher_api.requests.get", return_value=mock_response) as mock_get:
         result = api._test_url()
 
-    mock_get.assert_called_once_with(api.api_url)
+    mock_get.assert_called_once_with(api.api_url, timeout=api.timeout)
     assert result is True
 
 def test__test_url_failure(publications):
@@ -91,9 +92,14 @@ def test__attempt_download_all_scenarios(publications):
     filepath = "paper.pdf"
 
     # Success.
-    with patch.object(api, "_download_paper_from_url", return_value=None):
+    with patch.object(api, "_download_paper_from_url", return_value=True):
         result = api._attempt_download(url=url, doi=doi, filepath=filepath)
         assert result is True
+
+    # Body was the wrong file type, so nothing was written.
+    with patch.object(api, "_download_paper_from_url", return_value=False):
+        result = api._attempt_download(url=url, doi=doi, filepath=filepath)
+        assert result is False
 
     # HTTP error.
     with patch.object(api, "_download_paper_from_url", side_effect=requests.exceptions.HTTPError):
@@ -125,17 +131,51 @@ def test__download_paper_from_url_success():
 
     # Mock the HTTP response
     mock_response = MagicMock()
-    mock_response.content = b"PDF-DATA"
+    mock_response.content = b"%PDF-DATA"
     mock_response.raise_for_status.return_value = None
 
     with patch("biomarkit.text_download.apis.abc.publisher_api.requests.get", return_value=mock_response) as mock_get, \
          patch("builtins.open", mock_open()) as mock_file:
 
-        api._download_paper_from_url(url, filepath)
+        result = api._download_paper_from_url(url, filepath)
 
+    assert result is True
     mock_get.assert_called_once_with(url, headers=None, timeout=api.timeout, allow_redirects=True)
     mock_file.assert_called_once_with(filepath, "wb")
-    mock_file().write.assert_called_once_with(b"PDF-DATA")
+    mock_file().write.assert_called_once_with(b"%PDF-DATA")
+
+
+@pytest.mark.parametrize("content, filename, expected", [
+    (b"<html>Access denied</html>", "paper.pdf", False),
+    (b"\xef\xbb\xbf\n<?xml version='1.0'?><a/>", "paper.xml", True),
+    (b"Access denied", "paper.xml", False),
+])
+def test__download_paper_from_url_checks_body_type(content, filename, expected):
+    api = PublicationApiDummy(name="unpaywall", publication_list=[])
+    mock_response = MagicMock()
+    mock_response.content = content
+    mock_response.raise_for_status.return_value = None
+
+    with patch("biomarkit.text_download.apis.abc.publisher_api.requests.get", return_value=mock_response), \
+         patch("builtins.open", mock_open()) as mock_file:
+        result = api._download_paper_from_url("https://example.com/x", Path("/tmp") / filename)
+
+    assert result is expected
+    assert mock_file.called is expected
+
+
+def test_download_all_papers_sleeps_between_papers_not_before_first(publications, tmp_path):
+    api = PublicationApiDummy(name="unpaywall", publication_list=publications)
+    pdf = tmp_path / "paper.pdf"
+    pdf.write_bytes(b"%PDF-1.4 %%EOF")
+
+    with patch.object(api, "download_paper", return_value=pdf), \
+         patch.object(api, "_cache_successful_download"), \
+         patch("biomarkit.text_download.apis.abc.publisher_api.time.sleep") as mock_sleep:
+        PublisherApi.download_all_papers(api)
+
+    assert mock_sleep.call_count == len(publications) - 1
+    assert all(c.args == (api.rate_limit_delay,) for c in mock_sleep.call_args_list)
 
 def test_download_paper_from_url_http_error():
     """Should raise if HTTP request fails."""
@@ -197,7 +237,10 @@ def test__cache_successful_download(publications, active_corpus):
 
     # Create a publication with a filepath.
     pub=publications[0]
-    pub.publication_filepath=Path("paper.pdf")
+    pdf = active_corpus.db.parent / "paper.pdf"
+    pdf.parent.mkdir(parents=True, exist_ok=True)
+    pdf.write_bytes(b"%PDF-1.4 %%EOF")
+    pub.publication_filepath = pdf
 
     # Success.
     with patch("biomarkit.text_download.apis.abc.publisher_api.insert_row", return_value=None) as mock_insert:
@@ -206,7 +249,7 @@ def test__cache_successful_download(publications, active_corpus):
         mock_insert.assert_called_once_with(
             doi=pub.doi,
             downloaded_from="unpaywall",
-            publication_filepath=str(pub.publication_filepath),
+            publication_filepath="paper.pdf",
             db_path=active_corpus.db
         )
 

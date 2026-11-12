@@ -1,5 +1,7 @@
 ﻿import logging
 
+from pydantic import ValidationError
+
 import biomarkit.config
 from typing import List, Dict
 from collections import defaultdict
@@ -75,9 +77,8 @@ class Controller:
         to see if the doi is already cached. If true, it will attempt to set publication.publication_filepath to that
         row.
 
-        If the doi exists in the database but the filepath does not point to an existing file on the system, a
-        pydantic validation error will be raised through the Publication object. The filepath existence is handled by
-        the pydantic.filepath type so no need to worry about non-existent filepaths here.
+        If the doi exists in the database but the filepath does not point to an existing file on the system, the
+        Publication's FilePath validation rejects it; a warning is logged and the publication is treated as uncached.
 
         Returns
         -------
@@ -92,7 +93,11 @@ class Controller:
             # 1 - Check to see if the DOI is in the database. Only add the filepath if it actually exists.
             cached_row = get_row_for_doi(pub.doi, db_path=self.cache)
             if cached_row:
-                pub.publication_filepath = _to_absolute(cached_row["publication_filepath"], self.cache)
+                try:
+                    pub.publication_filepath = _to_absolute(cached_row["publication_filepath"], self.cache)
+                except ValidationError:
+                    logging.warning(f"{pub.doi}: cached file {cached_row['publication_filepath']} not found on "
+                                    f"disk - will try to download again.")
 
         logging.debug("Controller finished checking cache for existing publication filepaths.")
 

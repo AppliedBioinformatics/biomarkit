@@ -14,7 +14,7 @@ class MdpiClient(PlaywrightPublisherApi):
     """
 
     def __init__(self, publication_list: list):
-        super().__init__(name="mdpi", publication_list=publication_list, timeout=1)
+        super().__init__(name="mdpi", publication_list=publication_list, timeout=30)
 
     def attempt_fallback(self, doi: str, filepath: str) -> bool:
         """

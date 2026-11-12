@@ -269,32 +269,56 @@ def test_download_paper_short_circuits_on_first_success(publications):
     mock_chemrxiv.assert_not_called()
     mock_unpaywall.assert_not_called()
 
-# === Bulk download behaviour (inherited from PublisherApi) ===
-def test_download_all_papers_success(publications):
-    fake_path = MagicMock()
-    api=OpenSourceClient(publication_list=publications)
+# === Bulk download behaviour (thread-pooled override) ===
+def _fake_pdfs(tmp_path, publications):
+    paths = {}
+    for i, pub in enumerate(publications):
+        pdf = tmp_path / f"paper_{i}.pdf"
+        pdf.write_bytes(b"%PDF-1.4 %%EOF")
+        paths[pub.doi] = pdf
+    return paths
 
-    with patch.object(api, "download_paper", return_value=fake_path) as mock_download, \
-            patch.object(api, "_cache_successful_download") as mock_cache:
+def test_download_all_papers_success(publications, tmp_path):
+    api = OpenSourceClient(publication_list=publications)
+    paths = _fake_pdfs(tmp_path, publications)
+
+    with patch.object(api, "download_paper", side_effect=lambda doi: paths[doi]) as mock_download, \
+            patch.object(api, "_cache_successful_download") as mock_cache, \
+            patch("biomarkit.text_download.apis.abc.publisher_api.time.sleep"):
 
         api.download_all_papers()
         assert mock_download.call_count == len(publications)
         assert mock_cache.call_count == len(publications)
 
         for pub in publications:
-            assert pub.publication_filepath == fake_path
+            assert pub.publication_filepath == paths[pub.doi]
 
-def test_download_papers_partial_failures(publications):
+def test_download_papers_partial_failures(publications, tmp_path):
     api = OpenSourceClient(publication_list=publications)
-    fake_path = MagicMock()
-    side_effects = [fake_path, None, fake_path]
+    paths = _fake_pdfs(tmp_path, publications)
+    failing_doi = publications[1].doi
 
-    with patch.object(api, "download_paper", side_effect=side_effects) as mock_download, \
-            patch.object(api, "_cache_successful_download") as mock_cache:
+    with patch.object(api, "download_paper",
+                      side_effect=lambda doi: None if doi == failing_doi else paths[doi]) as mock_download, \
+            patch.object(api, "_cache_successful_download") as mock_cache, \
+            patch("biomarkit.text_download.apis.abc.publisher_api.time.sleep"):
 
         api.download_all_papers()
         assert mock_download.call_count == len(publications)
-        assert mock_cache.call_count == 2
-        assert publications[0].publication_filepath == fake_path
+        assert mock_cache.call_count == len(publications) - 1
+        assert publications[0].publication_filepath == paths[publications[0].doi]
         assert publications[1].publication_filepath is None
-        assert publications[2].publication_filepath == fake_path
+        assert publications[2].publication_filepath == paths[publications[2].doi]
+
+def test_download_all_papers_uses_thread_pool(publications):
+    from concurrent.futures import ThreadPoolExecutor
+    api = OpenSourceClient(publication_list=publications)
+    assert api.max_workers == 4
+
+    with patch("biomarkit.text_download.apis.clients.opensource.ThreadPoolExecutor",
+               wraps=ThreadPoolExecutor) as mock_pool, \
+            patch.object(api, "download_paper", return_value=None), \
+            patch("biomarkit.text_download.apis.abc.publisher_api.time.sleep"):
+        api.download_all_papers()
+
+    mock_pool.assert_called_once_with(max_workers=4)

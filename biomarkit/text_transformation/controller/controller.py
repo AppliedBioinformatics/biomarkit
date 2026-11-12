@@ -2,6 +2,8 @@
 from pathlib import Path
 from typing import List
 
+from pydantic import ValidationError
+
 import biomarkit.config
 from biomarkit.text_download.basemodels.publication import Publication
 from biomarkit.text_download.database.database import create_database, get_row_for_doi, _to_absolute
@@ -73,9 +75,12 @@ class Controller:
                 )
                 continue
 
-            pub.publication_filepath = Path(_to_absolute(row["publication_filepath"], self.cache))
-            pub.content_json_filepath = Path(_to_absolute(row["content_json_filepath"], self.cache)) if row.get("content_json_filepath") else None
-            pub.final_md_filepath = Path(_to_absolute(row["final_md_filepath"], self.cache)) if row.get("final_md_filepath") else None
+            for field in ("publication_filepath", "content_json_filepath", "final_md_filepath"):
+                try:
+                    setattr(pub, field, Path(_to_absolute(row[field], self.cache)) if row.get(field) else None)
+                except ValidationError:
+                    logging.warning(f"{pub.doi}: cached {field} {row[field]} not found on disk - treating as missing.")
+                    setattr(pub, field, None)
 
         logging.debug("Finished updating publication filepath states from cache.")
 

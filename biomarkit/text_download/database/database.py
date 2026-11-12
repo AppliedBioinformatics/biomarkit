@@ -46,6 +46,8 @@ def create_database(db_path: Path, del_existing: bool = False) -> None:
     # Build.
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(db_path) as conn:
+        # WAL lets several download threads write to the cache without "database is locked" errors.
+        conn.execute("PRAGMA journal_mode=WAL")
         conn.execute(DB_SCHEMA)
         conn.commit()
 
@@ -61,7 +63,7 @@ def insert_row(doi: str, downloaded_from: str, publication_filepath: str, db_pat
     publication_filepath : Optional[str] - Filepath where the item is stored.
     db_path: Union[Path, str] - Pathlib.Path object or str for the location of the database file (sqlite3).
     """
-    conn = sqlite3.connect(str(db_path))
+    conn = sqlite3.connect(str(db_path), timeout=30)
     cursor = conn.cursor()
 
     try:

@@ -24,7 +24,7 @@ class TestFrontiersClient:
     def test_init_sets_name_and_timeout(self, publications):
         client = FrontiersClient(publications)
         assert client.name == "frontiers"
-        assert client.timeout == 5
+        assert client.timeout == 30
 
     def test_download_paper_no_url_uses_fallback(self, publications):
         client = FrontiersClient(publications)
@@ -85,16 +85,29 @@ class TestFrontiersClient:
     def test_attempt_fallback_success(self, publications):
         client = FrontiersClient(publications)
         mock_resp = MagicMock()
-        mock_resp.iter_content.return_value = [b"PDF-DATA"]
+        mock_resp.content = b"%PDF-DATA"
+        mock_resp.raise_for_status.return_value = None
 
-        with patch("biomarkit.text_download.apis.clients.frontiers.requests.get", return_value=mock_resp), \
+        with patch("biomarkit.text_download.apis.abc.publisher_api.requests.get", return_value=mock_resp), \
              patch("builtins.open", MagicMock()):
             result = client.attempt_fallback("10.1234/test", "/tmp/p.pdf")
         assert result is True
 
+    def test_attempt_fallback_rejects_html(self, publications):
+        client = FrontiersClient(publications)
+        mock_resp = MagicMock()
+        mock_resp.content = b"<html>bot check</html>"
+        mock_resp.raise_for_status.return_value = None
+
+        with patch("biomarkit.text_download.apis.abc.publisher_api.requests.get", return_value=mock_resp), \
+             patch("builtins.open", MagicMock()) as mock_file:
+            result = client.attempt_fallback("10.1234/test", "/tmp/p.pdf")
+        assert result is False
+        mock_file.assert_not_called()
+
     def test_attempt_fallback_request_error(self, publications):
         client = FrontiersClient(publications)
-        with patch("biomarkit.text_download.apis.clients.frontiers.requests.get",
+        with patch("biomarkit.text_download.apis.abc.publisher_api.requests.get",
                    side_effect=RequestException("fail")):
             result = client.attempt_fallback("10.1234/test", "/tmp/p.pdf")
         assert result is False

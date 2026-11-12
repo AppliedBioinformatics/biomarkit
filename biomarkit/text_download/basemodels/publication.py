@@ -26,7 +26,8 @@ class Publication(BaseModel):
     final_md_filepath: Path to the final processed markdown file (must exist if provided).
     chunks: Optional list of Chunk objects produced by the chunking pipeline.
     """
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    # validate_assignment makes the FilePath fields check the file exists whenever they are set, not only at init.
+    model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
 
     doi: str
     title: str

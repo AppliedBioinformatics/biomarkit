@@ -1,7 +1,10 @@
 import re
+from concurrent.futures import ThreadPoolExecutor
 from ..abc.publisher_api import PublisherApi
 from pathlib import Path
 import requests
+from tqdm import tqdm
+from biomarkit.text_download.utils.generics import progress_split_bar
 
 
 class OpenSourceClient(PublisherApi):
@@ -19,17 +22,19 @@ class OpenSourceClient(PublisherApi):
     back to their source.
     """
 
-    # Preprint-server routes use their own timeout and headers. self.timeout stays at 1 because
-    # the base class also uses it as the per-paper politeness sleep in download_all_papers().
+    # Preprint-server routes use their own timeout and headers.
     preprint_timeout = 60
     preprint_headers = {"User-Agent": "biomarkit/1.0"}
 
     chemrxiv_api_url = "https://www.cambridge.org/engage/coe/public-api/v1/items/doi"
 
+    # Papers attempted concurrently. Each worker still waits rate_limit_delay between its papers.
+    max_workers = 4
+
     # === Inherits from PublicationApi Class ===
     def __init__(self, publication_list: list):
         super().__init__(name="opensource", publication_list=publication_list)
-        self.timeout = 1
+        self.timeout = 30
         # Same bot-detection issue as SpringerClient: the browser-spoofing default_headers
         # cause publisher sites (BioMedCentral, Springer, etc.) to return HTML instead of PDFs.
         self.request_headers = {}
@@ -213,6 +218,27 @@ class OpenSourceClient(PublisherApi):
         return filepath
 
     # === These methods are inherited from PublicationApi and should be overwritten. ===
+    def download_all_papers(self) -> None:
+        """
+        Thread-pooled version of PublisherApi.download_all_papers(). Only this client is parallelised: it covers every
+        uncached paper and is pure HTTP, whereas the Playwright clients must stay on one thread.
+        """
+        total = len(self.publication_list)
+        self.logger.info(f"Attempting to download {total} papers from {self.name} with {self.max_workers} workers.")
+
+        success, failed = 0, 0
+        with tqdm(total=total, desc=self.name, unit="paper", leave=True, dynamic_ncols=True) as bar, \
+                ThreadPoolExecutor(max_workers=self.max_workers) as pool:
+            for ok in pool.map(self._download_one, range(total), self.publication_list):
+                if ok:
+                    success += 1
+                else:
+                    failed += 1
+                bar.update(1)
+                bar.set_postfix_str(progress_split_bar(success, failed, total))
+
+        self.logger.debug(f"{self.name}.download_all_papers() completed — {success}/{total} downloaded.")
+
     def download_paper(self, doi: str) -> Path or None:
         """
         Downloads a single paper. Tries the direct preprint-server routes first

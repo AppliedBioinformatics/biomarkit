@@ -38,6 +38,7 @@ def load_corpus(corpus: str | Path, scopus_file: str | Path | None = None,
         One Publication per DOI found in the cache, with metadata from the Scopus CSV and
         filepaths populated wherever they exist in the cache. Empty for a new corpus.
     """
+    from pydantic import ValidationError
     from biomarkit.config import set_active_corpus
     from biomarkit.text_download.filter import filter_scopus_csv as ftr
     from biomarkit.text_download.database.database import get_all_cached_dois, get_row_for_doi, _to_absolute
@@ -88,12 +89,13 @@ def load_corpus(corpus: str | Path, scopus_file: str | Path | None = None,
         row = get_row_for_doi(pub.doi, db_path=paths.db)
         if row is None:
             continue
-        if row.get("publication_filepath"):
-            pub.publication_filepath = _to_absolute(row["publication_filepath"], paths.db)
-        if row.get("content_json_filepath"):
-            pub.content_json_filepath = _to_absolute(row["content_json_filepath"], paths.db)
-        if row.get("final_md_filepath"):
-            pub.final_md_filepath = _to_absolute(row["final_md_filepath"], paths.db)
+        for field in ("publication_filepath", "content_json_filepath", "final_md_filepath"):
+            if not row.get(field):
+                continue
+            try:
+                setattr(pub, field, _to_absolute(row[field], paths.db))
+            except ValidationError:
+                logging.warning(f"{pub.doi}: cached {field} {row[field]} not found on disk - treating as missing.")
 
     return publications
 

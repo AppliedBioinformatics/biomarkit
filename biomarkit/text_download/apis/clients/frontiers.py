@@ -1,9 +1,6 @@
 ﻿from pathlib import Path
 from typing import Optional
 
-import requests
-from requests.exceptions import RequestException
-
 from biomarkit.config import TMP_DIR
 from biomarkit.text_download.apis.abc.playwright_publisher_api import PlaywrightPublisherApi
 from biomarkit.text_download.basemodels.publication import Publication
@@ -14,29 +11,15 @@ class FrontiersClient(PlaywrightPublisherApi):
     """
 
     def __init__(self, publication_list: list):
-        super().__init__(name="frontiers", publication_list=publication_list, timeout=5)
+        super().__init__(name="frontiers", publication_list=publication_list, timeout=30)
 
     def attempt_fallback(self, doi: str, filepath: str) -> bool:
         """
         Attempts to download the PDF using the generic Frontiers open-access URL pattern.
         """
         generic_url = f"http://journal.frontiersin.org/article/{doi}/pdf"
-
-        try:
-            self.logger.info(f"Attempting fallback download from generic URL: {generic_url}")
-            response = requests.get(generic_url, stream=True, timeout=self.timeout)
-            response.raise_for_status()
-
-            with open(filepath, 'wb') as pdf_file:
-                for chunk in response.iter_content(chunk_size=8192):
-                    pdf_file.write(chunk)
-
-            self.logger.info(f"Successfully downloaded PDF (Fallback Attempt) to {filepath}")
-            return True
-
-        except RequestException as fallback_e:
-            self.logger.error(f"Fallback download also failed for {doi}. Error: {fallback_e}")
-            return False
+        self.logger.info(f"Attempting fallback download from generic URL: {generic_url}")
+        return self._download_pdf_if_valid(url=generic_url, filepath=filepath, headers={})
 
     def download_paper(self, doi: str) -> Optional[Path]:
         download_url = self._get_pdf_url(doi=doi)

@@ -11,13 +11,13 @@ class WileyClient(PublisherApi):
     The Wiley publishing group are maintaining their own Python package for downloading PDF's via their API. This class
     uses this package (wiley-tdm) to handle paper downloads. Documentation for the package is available here:
     https://github.com/WileyLabs/tdm-client?tab=readme-ov-file#wiley-tdm-client. API limits at wiley allow for 60
-    requests every 10 minutes, to prevent errors, self.timeout is set to 10 (seconds) for this client.
+    requests every 10 minutes, to prevent errors, self.rate_limit_delay is set to 10 (seconds) for this client.
     """
 
     # === Inherits from PublicationApi Class ===
     def __init__(self, publication_list: list):
         super().__init__(name="wiley", publication_list=publication_list)
-        self.timeout = 10
+        self.rate_limit_delay = 10
 
         # Add the official Wiley client.
         self.wiley_client=self.connect_wiley_tdm()

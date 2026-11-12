@@ -141,9 +141,23 @@ def test_publication_validate_doi_fail():
                 document_type=DocumentType.PDF
             )
 
-def test_publication_is_cached_property():
+def test_publication_is_cached_property(tmp_path):
     pub = Publication(doi="10.1037/arc0000014", title="Test", year=2020, publisher="Nature")
     assert pub.is_cached is False
-    pub.publication_filepath = "/some/location"
+    pdf = tmp_path / "x.pdf"
+    pdf.touch()
+    pub.publication_filepath = pdf
     assert pub.is_cached is True
+
+def test_assignment_rejects_missing_file(tmp_path):
+    from pydantic import ValidationError
+    pub = Publication(doi="10.1037/arc0000014", title="Test", year=2020, publisher="Nature")
+    with pytest.raises(ValidationError):
+        pub.publication_filepath = tmp_path / "missing.pdf"
+    assert pub.publication_filepath is None
+
+def test_document_type_assignment_coerces_str():
+    pub = Publication(doi="10.1037/arc0000014", title="Test", year=2020, publisher="Nature")
+    pub.document_type = "XML"
+    assert pub.document_type == DocumentType.XML
 

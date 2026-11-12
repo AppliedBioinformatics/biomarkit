@@ -23,7 +23,7 @@ class TestMdpiClient:
     def test_init_sets_name_and_timeout(self, publications):
         client = MdpiClient(publications)
         assert client.name == "mdpi"
-        assert client.timeout == 1
+        assert client.timeout == 30
 
     def test_download_paper_no_url_uses_fallback(self, publications):
         client = MdpiClient(publications)

@@ -332,3 +332,27 @@ def test_prepare_publications_full_pipeline(tmp_path):
     assert len(controller.completed) == 0
     # Uncached publication must have been discarded.
     assert all(p.doi != "10.1037/int3" for p in controller.publications)
+
+def test_update_missing_cached_json_leaves_none(tmp_path, uncached_publications, caplog):
+    from biomarkit.text_transformation.controller.controller import Controller
+
+    pub = uncached_publications[0]
+    pub_file = tmp_path / "pub.pdf"
+    pub_file.touch()
+
+    _setup_db([{
+        "doi": pub.doi,
+        "downloaded_from": "publisher",
+        "publication_filepath": str(pub_file),
+        "content_json_filepath": str(tmp_path / "deleted.json"),
+        "final_md_filepath": None,
+    }])
+
+    controller = Controller(publication_list=[pub])
+    controller.cache = TMP_DB
+    with caplog.at_level("WARNING"):
+        controller._update_publications_cache_state()
+
+    assert pub.publication_filepath == pub_file
+    assert pub.content_json_filepath is None
+    assert "not found on disk" in caplog.text

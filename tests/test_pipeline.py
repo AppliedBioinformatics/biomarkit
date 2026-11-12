@@ -348,3 +348,17 @@ def test_load_corpus_does_not_import_plotly_or_playwright(tmp_path):
     )
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
     assert result.stdout.strip().splitlines()[-1] == "False False"
+
+
+def test_load_corpus_warns_and_skips_missing_cached_file(tmp_path, caplog):
+    csv = tmp_path / "scopus.csv"
+    _write_scopus_csv(csv, [{"doi": "10.1000/aaa", "title": "Paper A", "publisher": "Elsevier", "year": 2021}])
+    db = tmp_path / "sqlite.db"
+    create_database(db)
+    insert_row("10.1000/aaa", "elsevier", str(tmp_path / "manuscripts" / "deleted.pdf"), db)
+
+    with caplog.at_level("WARNING"):
+        pubs = load_corpus(tmp_path)
+
+    assert pubs[0].publication_filepath is None
+    assert "not found on disk" in caplog.text

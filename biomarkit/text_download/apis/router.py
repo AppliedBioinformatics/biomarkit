@@ -74,23 +74,35 @@ class ApiRouter:
         return dict(sorted_pubs)
 
     @staticmethod
-    def _map_to_nodes(pub_dict: Dict[str, List[Publication]], client_mapper: Dict[str, PublisherApi]) -> list:
+    def _map_to_nodes(pub_dict: Dict[str, List[Publication]], client_mapper: Dict[str, PublisherApi],
+                      unfinished: list = None) -> list:
         """
         Maps a dictionary of publication objects sorted by publisher to a class mapper containing the API clients for
         each available publisher. Once mapped, the function will instantiate the classes and return them as a list of
-        instantiated objects.
+        instantiated objects. A client that fails to start (e.g. its endpoint is unreachable or its API key is
+        missing) is skipped and its publications are added to `unfinished`, so the other publishers still run.
 
         Parameters
         ----------
         pub_dict : Dict[str, List[Publication]]
         client_map: Dict[str, PublisherApi]
+        unfinished: list, optional - Receives the publications of clients that could not be started.
 
         Returns
         -------
         List[PublicationApi]
         """
 
-        client_map = [client_mapper[key](pub_list) for key, pub_list in pub_dict.items() if key in client_mapper]
+        client_map = []
+        for key, pub_list in pub_dict.items():
+            if key not in client_mapper:
+                continue
+            try:
+                client_map.append(client_mapper[key](pub_list))
+            except Exception as e:
+                logging.error(f"Could not start {key} client ({e}); skipping {len(pub_list)} publication(s).")
+                if unfinished is not None:
+                    unfinished.extend(pub_list)
 
         logging.info("Client map contains:")
         for client in client_map:
@@ -209,7 +221,8 @@ class ApiRouter:
 
         # Attempt to download from specific APIs:
         logging.debug(f"Spawning client nodes and appending relative publications to publisher.publication_list...")
-        node_list = self._map_to_nodes(pub_dict=pubs_by_publisher, client_mapper=api_clients)
+        node_list = self._map_to_nodes(pub_dict=pubs_by_publisher, client_mapper=api_clients,
+                                       unfinished=self.unfinished_publications)
         logging.info(f"Successfully generated list of {len(node_list)} client nodes.")
         logging.debug("Attempting downloads in parallel...")
         results = self._download_in_parallel(client_list=node_list, max_threads=MAX_THREADS)

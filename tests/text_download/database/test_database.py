@@ -120,3 +120,11 @@ def test_roundtrip(tmp_path):
     db = tmp_path / "sqlite.db"
     original = str(tmp_path / "results" / "stem.md")
     assert _to_absolute(_to_relative(original, db), db) == original
+
+
+def test_create_database_enables_wal(tmp_path):
+    db = tmp_path / "wal.sqlite"
+    create_database(db_path=db)
+    with sqlite3.connect(db) as conn:
+        mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+    assert mode == "wal"

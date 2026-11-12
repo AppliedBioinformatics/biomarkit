@@ -202,7 +202,7 @@ def test__download_in_parallel_api_error(mock_publisher_failure, mock_publisher_
         assert mock_run.call_count == 2
         assert "Unhandled exception in TestFailureClient" in caplog.text
 
-def test_throw_at_opensource_success(publication_list):
+def test_throw_at_opensource_success(publication_list, tmp_path):
 
     # Spawn a router.
     router = ApiRouter(publication_list)
@@ -210,9 +210,10 @@ def test_throw_at_opensource_success(publication_list):
     with patch('biomarkit.text_download.apis.router.OpenSourceClient') as MockOpenSourceClient:
         mock_client = MockOpenSourceClient.return_value
         successful_pubs = publication_list[:2]
+        (tmp_path / "file.txt").write_bytes(b"%PDF")
 
         for pub in successful_pubs:
-            pub.publication_filepath = "/file.txt"
+            pub.publication_filepath = tmp_path / "file.txt"
 
         mock_client.publication_list = publication_list
         mock_client.download_all_papers = MagicMock()
@@ -251,11 +252,13 @@ def test_throw_at_opensource_when_flag_false(publication_list):
     MockOS.assert_not_called()
     assert router.finished_publications == []
 
-def test_disperse_to_nodes(publication_list, mock_api_mapper):
+def test_disperse_to_nodes(publication_list, mock_api_mapper, tmp_path):
 
     # Test only a few pubs to keep things simple.
+    downloaded = tmp_path / "downloaded.pdf"
+    downloaded.write_bytes(b"%PDF")
     for pub in publication_list:
-        pub.publication_filepath = "/already/downloaded"
+        pub.publication_filepath = downloaded
 
     # Make some publications pass so aren't routed to nodes.
     publication_list[0].publication_filepath = None
@@ -277,7 +280,8 @@ def test_disperse_to_nodes(publication_list, mock_api_mapper):
         results = router.disperse_to_nodes()
 
         mock_sort.assert_called_once_with([publication_list[0], publication_list[1]])
-        mock_map.assert_called_once_with(pub_dict=sorted_dict, client_mapper=api_clients)
+        mock_map.assert_called_once_with(pub_dict=sorted_dict, client_mapper=api_clients,
+                                         unfinished=router.unfinished_publications)
         mock_parallel.assert_called_once_with(client_list=node_list, max_threads=10)
         assert results == download_results
 
@@ -301,3 +305,34 @@ def test_finalise_publication_list(publication_list):
 
 
     #assert len(all_pubs) == len(router.finished_publications) + len(router.unfinished_publications)
+
+def _mapper_with_broken_nature(mock_api_mapper):
+    class BrokenNatureApi:
+        def __init__(self, publication_list):
+            raise ConnectionError("endpoint unreachable")
+
+    mapper = dict(mock_api_mapper)
+    mapper["nature"] = BrokenNatureApi
+    return mapper
+
+def test_map_to_nodes_skips_client_that_fails_to_spawn(publication_list, mock_api_mapper):
+    pub_dict = ApiRouter._sort_publications(publication_list)
+    unfinished = []
+
+    nodes = ApiRouter._map_to_nodes(pub_dict=pub_dict, client_mapper=_mapper_with_broken_nature(mock_api_mapper),
+                                    unfinished=unfinished)
+
+    assert sorted(n.name for n in nodes) == ["springer", "wiley"]
+    assert unfinished == pub_dict["nature"]
+
+def test_disperse_to_nodes_unreachable_publisher_lands_in_unfinished(publication_list, mock_api_mapper):
+    router = ApiRouter(publication_list)
+
+    with patch("biomarkit.text_download.apis.router.api_clients", _mapper_with_broken_nature(mock_api_mapper)),          patch.object(ApiRouter, "_download_in_parallel",
+                      side_effect=lambda client_list, max_threads: {c.name: c.publication_list for c in client_list}):
+        results = router.disperse_to_nodes()
+        all_pubs = router.finalise_publication_list(results)
+
+    assert len(router.unfinished_publications) == 3
+    assert all(p.publisher == "nature" for p in router.unfinished_publications)
+    assert len(all_pubs) == len(publication_list)

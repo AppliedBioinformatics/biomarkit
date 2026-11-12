@@ -27,6 +27,8 @@ class PublisherApi(ABC):
     name: str
     publication_list: List[Publication]
     timeout: int
+    # Politeness pause between papers (seconds), separate from the HTTP request timeout.
+    rate_limit_delay: float = 1.0
 
     def __init__(self, name, publication_list, timeout: int = 10):
         self.name = name
@@ -89,7 +91,7 @@ class PublisherApi(ABC):
         """
 
         try:
-            response = requests.get(self.api_url)
+            response = requests.get(self.api_url, timeout=self.timeout)
             response.raise_for_status()
             return True
 
@@ -122,8 +124,7 @@ class PublisherApi(ABC):
         """
 
         try:
-            self._download_paper_from_url(url=url, filepath=filepath)
-            return True
+            return self._download_paper_from_url(url=url, filepath=filepath)
 
         # Bot detected.
         except requests.exceptions.HTTPError as e:
@@ -155,9 +156,24 @@ class PublisherApi(ABC):
                              f"probably due to too many redirects.")
             return False
 
-    def _download_paper_from_url(self, url: str, filepath: Path) -> None:
+    @staticmethod
+    def _body_matches_suffix(content: bytes, suffix: str) -> bool:
         """
-        Attempts to download a paper from a URL link and save to a file at the filepath parameter.
+        Cheap check that a response body is the file type we asked for. Publishers often return HTTP 200 with an
+        HTML error or bot-challenge page, which would otherwise be saved as a "PDF".
+        """
+        suffix = suffix.lower()
+        if suffix == ".pdf":
+            return content.startswith(b"%PDF")
+        if suffix == ".xml":
+            return content.lstrip(b"\xef\xbb\xbf \t\r\n").startswith(b"<")
+        return True
+
+    def _download_paper_from_url(self, url: str, filepath: Path) -> bool:
+        """
+        Attempts to download a paper from a URL link and save to a file at the filepath parameter. Nothing is written
+        if the body doesn't match the file type implied by the filepath suffix.
+
         Parameters
         ----------
         url: str
@@ -165,17 +181,21 @@ class PublisherApi(ABC):
 
         Returns
         -------
-        None
+        bool: True if the file was written.
         """
         response = requests.get(url, headers=self.request_headers, timeout=self.timeout, allow_redirects=True)
         response.raise_for_status()
+
+        suffix = Path(filepath).suffix
+        if not self._body_matches_suffix(response.content, suffix):
+            self.logger.info(f"Response from {url} is not a {suffix} file - skipping write.")
+            return False
 
         with open(filepath, "wb") as f:
             f.write(response.content)
 
         self.logger.info(f"Finished writing bytes to {filepath}.")
-
-        return None
+        return True
 
     def _download_pdf_if_valid(self, url: str, filepath: Path, headers: dict = None, timeout: int = None) -> bool:
         """
@@ -244,6 +264,24 @@ class PublisherApi(ABC):
         """
         pass
 
+    def _download_one(self, index: int, p: Publication) -> bool:
+        """
+        Attempts a single publication: waits rate_limit_delay (except before the first paper), downloads, and caches
+        on success. Returns True if the paper was downloaded.
+        """
+        if index:
+            time.sleep(self.rate_limit_delay)
+        self.logger.debug(f"Attempting to download: {p.doi}.")
+        filepath = self.download_paper(doi=p.doi)
+
+        if not filepath:
+            return False
+
+        p.publication_filepath = filepath
+        self.logger.debug(f"Updated related Publication object 'publication_filepath' attribute.")
+        self._cache_successful_download(pub=p)
+        return True
+
     def download_all_papers(self) -> None:
         """
         Main function for attempting to download all papers in self.publication_list. The function should iterate over
@@ -259,15 +297,8 @@ class PublisherApi(ABC):
 
         success, failed = 0, 0
         with tqdm(self.publication_list, desc=self.name, unit="paper", leave=True, dynamic_ncols=True) as bar:
-            for p in bar:
-                time.sleep(self.timeout)
-                self.logger.debug(f"Attempting to download: {p.doi}.")
-                filepath = self.download_paper(doi=p.doi)
-
-                if filepath:
-                    p.publication_filepath = filepath
-                    self.logger.debug(f"Updated related Publication object 'publication_filepath' attribute.")
-                    self._cache_successful_download(pub=p)
+            for i, p in enumerate(bar):
+                if self._download_one(i, p):
                     success += 1
                 else:
                     failed += 1
