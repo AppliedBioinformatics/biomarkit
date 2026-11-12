@@ -275,12 +275,45 @@ These change results, not APIs. Check them if the project compares counts betwee
 
 ---
 
+## 7. After 1.1.0 (unreleased): MinerU is an optional extra
+
+**Detect:** the project installs `biomarkit` and calls `transform_text()` on PDFs.
+
+MinerU, `torch` and `torchvision` are no longer installed by default. Downloading, Elsevier XML conversion and
+standardisation work without them; converting PDFs needs the `mineru` extra:
+
+```diff
+- "biomarkit"
++ "biomarkit[mineru]"
+```
+
+From a source checkout, use `uv sync --extra mineru` (add `--extra dev` for the tests). Without the extra,
+`transform_text()` raises an `ImportError` with this install hint as soon as there are PDFs to convert.
+
+Other changes in this release need no code change:
+
+- `standardise_text(max_workers=4)` and `transform_text(xml_workers=None)` process publications concurrently. Pass
+  `1` for the old sequential behaviour. On Windows and macOS, call `transform_text()` under
+  `if __name__ == "__main__":` because the XML workers are separate processes.
+- `standardise_text(force_imrad_structure=False)` no longer requires a reachable Ollama endpoint.
+- Download clients pause `rate_limit_delay` seconds between papers (1 s; Wiley 10 s) instead of their HTTP
+  timeout, and the open-access phase runs 4 downloads at once. Expect shorter download runs.
+- Responses that are not a PDF (or XML for Elsevier) are no longer saved, so fewer bogus "downloads" reach MinerU.
+- Cached file paths that no longer exist on disk are logged and treated as missing instead of being trusted.
+- New command-line entry point: `biomarkit <corpus> [options]` (see `biomarkit --help`). `python -m
+  biomarkit.pipeline` now takes the same arguments instead of a hard-coded corpus path.
+- New publisher clients are registered in `_CLIENT_PATHS` in `biomarkit/text_download/apis/map.py` (module path and
+  class name) rather than by importing the class into `api_clients`.
+
+---
+
 ## Checklist
 
 - [ ] No hits remain for the Step 0 patterns.
 - [ ] Every script calls `biomarkit.load_corpus(...)` before other biomarkit calls; non-interactive scripts pass
       `build=True` or `build=False`.
 - [ ] `secrets.env` has no `CORPUS_NAME`, and the MinerU variables are renamed or removed (section 3).
-- [ ] MinerU 4.x is installed (`python -m biomarkit.text_transformation.utils.generics` prints `4.`).
+- [ ] MinerU 4.x is installed (`python -m biomarkit.text_transformation.utils.generics` prints `4.`); after 1.1.0
+      that means installing `biomarkit[mineru]` (section 7).
 - [ ] `transform_text` calls use `mineru_tier`.
 - [ ] The project's own tests pass.

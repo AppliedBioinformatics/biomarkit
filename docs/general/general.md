@@ -7,8 +7,10 @@ The easiest way to install the package is using [pip](https://pip.pypa.io/en/sta
 ```bash
 pip install --upgrade pip
 pip install uv
-uv pip install biomarkit
+uv pip install "biomarkit[mineru]"
 ```
+The `[mineru]` extra installs MinerU and PyTorch for PDF conversion. Leave it off if you only download papers,
+convert Elsevier XML or standardise existing content lists.
 ### Workspace directory and secrets.env.
 By default, biomarkit creates a `corpora/` folder in your **current working directory** and looks for `secrets.env`
 there too. To use a different location, set the `BIOMARKIT_DIR` environment variable before running your script:

@@ -71,6 +71,7 @@ def test_check_mineru_raises_when_not_installed():
 
 def test_check_gpu_available():
     """check_gpu returns True when CUDA is available."""
+    pytest.importorskip("torch")
     import torch
     from biomarkit.text_transformation.utils.generics import check_gpu
 
@@ -84,6 +85,7 @@ def test_check_gpu_available():
 
 def test_check_gpu_unavailable():
     """check_gpu returns False and warns when CUDA is not available."""
+    pytest.importorskip("torch")
     import torch
     from biomarkit.text_transformation.utils.generics import check_gpu
 
@@ -148,6 +150,24 @@ def test_prepare_bulk_transformation_basic_tier_does_not_check_gpu(preflight_moc
     from biomarkit.text_transformation.utils.generics import prepare_bulk_transformation
     with patch(f"{GENERICS}.check_gpu") as mock_gpu, patch("biomarkit.config.MINERU_VLM_SERVER_URL", None):
         prepare_bulk_transformation(mineru_tier="basic")
+    mock_gpu.assert_not_called()
+
+
+def test_prepare_bulk_transformation_skips_mineru_checks_without_pdfs(preflight_mocks):
+    from biomarkit.text_transformation.utils.generics import prepare_bulk_transformation
+    with patch(f"{GENERICS}.check_gpu") as mock_gpu:
+        prepare_bulk_transformation(mineru_tier="standard", needs_mineru=False)
+    preflight_mocks.filepaths.assert_called_once()
+    preflight_mocks.mineru.assert_not_called()
+    mock_gpu.assert_not_called()
+
+
+def test_prepare_bulk_transformation_checks_mineru_before_gpu(preflight_mocks):
+    from biomarkit.text_transformation.utils.generics import prepare_bulk_transformation
+    preflight_mocks.mineru.side_effect = ImportError("MinerU is not installed")
+    with patch(f"{GENERICS}.check_gpu") as mock_gpu, patch("biomarkit.config.MINERU_VLM_SERVER_URL", None):
+        with pytest.raises(ImportError, match="not installed"):
+            prepare_bulk_transformation(mineru_tier="standard")
     mock_gpu.assert_not_called()
 
 

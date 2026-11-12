@@ -98,7 +98,6 @@ name = "biomarkit"
 version = "1.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "mineru", extra = ["torch"] },
     { name = "openai" },
     { name = "pandas" },
     { name = "playwright" },
@@ -106,9 +105,6 @@ dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "requests" },
-    { name = "torch" },
-    { name = "torchvision", version = "0.24.1", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
-    { name = "torchvision", version = "0.24.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux'" },
     { name = "tqdm" },
     { name = "wiley-tdm" },
 ]
@@ -118,11 +114,17 @@ dev = [
     { name = "coverage" },
     { name = "pytest" },
 ]
+mineru = [
+    { name = "mineru", extra = ["torch"] },
+    { name = "torch" },
+    { name = "torchvision", version = "0.24.1", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
+    { name = "torchvision", version = "0.24.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux'" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "coverage", marker = "extra == 'dev'", specifier = ">=7.11.0" },
-    { name = "mineru", extras = ["torch"], specifier = ">=4.0.12,<5" },
+    { name = "mineru", extras = ["torch"], marker = "extra == 'mineru'", specifier = ">=4.0.12,<5" },
     { name = "openai", specifier = ">=1.0.0" },
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "playwright", specifier = ">=1.56.0" },
@@ -131,12 +133,12 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.2" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "requests", specifier = ">=2.32.5" },
-    { name = "torch", specifier = "==2.9.1", index = "https://download.pytorch.org/whl/cu128" },
-    { name = "torchvision", specifier = "==0.24.1", index = "https://download.pytorch.org/whl/cu128" },
+    { name = "torch", marker = "extra == 'mineru'", specifier = "==2.9.1", index = "https://download.pytorch.org/whl/cu128" },
+    { name = "torchvision", marker = "extra == 'mineru'", specifier = "==0.24.1", index = "https://download.pytorch.org/whl/cu128" },
     { name = "tqdm", specifier = ">=4.67.0" },
     { name = "wiley-tdm", specifier = ">=1.0.0" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["dev", "mineru"]
 
 [[package]]
 name = "brotli"

@@ -7,7 +7,6 @@ license = { file = "LICENSE" }
 requires-python = ">=3.12,<3.13"
 authors = [{ name = "Jack Bruton", email = "jack.bruton@hotmail.com" }]
 dependencies = [
-    "mineru[torch]>=4.0.12,<5",
     "openai>=1.0.0",
     "pandas>=2.3.3",
     "playwright>=1.56.0",
@@ -15,14 +14,17 @@ dependencies = [
     "pydantic>=2.12.0",
     "python-dotenv>=1.0.0",
     "requests>=2.32.5",
-    "torch==2.9.1",
-    "torchvision==0.24.1",
     "tqdm>=4.67.0",
     "wiley-tdm>=1.0.0",
 ]
 
 [project.optional-dependencies]
 dev = ["coverage>=7.11.0", "pytest>=8.4.2"]
+# PDF conversion in transform_text(). Not needed for downloading, Elsevier XML conversion or standardisation.
+mineru = ["mineru[torch]>=4.0.12,<5", "torch==2.9.1", "torchvision==0.24.1"]
+
+[project.scripts]
+biomarkit = "biomarkit.cli:main"
 
 [build-system]
 requires = ["hatchling"]

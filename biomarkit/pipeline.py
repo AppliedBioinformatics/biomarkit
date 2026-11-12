@@ -250,9 +250,6 @@ def transform_text(
     from biomarkit.text_transformation.converters.mineru_pdf_to_md import MinerUPdfTransformer
     from biomarkit.text_transformation.visualisation.conversion_report import build_conversion_report
 
-    # Pre-transformation checks (tier, MinerU version, remote VLM settings, GPU availability).
-    prepare_bulk_transformation(mineru_tier=mineru_tier)
-
     # Send publications to text transformation controller to categorize them for processing based on cached state.
     controller = Controller(publication_list=publications)
     controller.prepare_publications()
@@ -262,6 +259,10 @@ def transform_text(
     pdfs_to_process = [pub for pub in controller.needs_transformation if pub.document_type == "PDF"]
     logging.info(f"Gathered {len(xmls_to_process)} .XML files to parse into JSON format.")
     logging.info(f"Gathered {len(pdfs_to_process)} .PDF files to parse into JSON format.")
+
+    # Pre-transformation checks (tier, MinerU version, remote VLM settings, GPU availability). MinerU is an optional
+    # extra, so it is only required when there are PDFs to convert.
+    prepare_bulk_transformation(mineru_tier=mineru_tier, needs_mineru=bool(pdfs_to_process))
 
     ElsevierXmlTransformer(publication_list=xmls_to_process, max_workers=xml_workers).transform_all()
     MinerUPdfTransformer(
@@ -373,36 +374,6 @@ def standardise_text(
 
 
 if __name__ == "__main__":
-    # Usage: uv run python -m biomarkit.pipeline [corpus name or path]
-    import sys
-    from biomarkit.text_download.utils.generics import setup_logging
-
-    corpus = r"C:\Users\jackb\OneDrive\Documents\GitHub\biomarkit\biomarkit\corpora\barley_water_logging"
-
-    # Setup.
-    setup_logging(level=logging.INFO)
-    logging.info("Complete a full new corpus conversion.")
-    load_corpus(corpus, build=False)
-
-    # Download.
-    publications = download_corpus(check_opensource=True, generate_report=True)
-    logging.info("Corpus download completed.")
-
-    # Convert.
-    publications = transform_text(publications,
-                                  mineru_tier="standard",
-                                  mineru_batch_size=25,
-                                  cleanup_intermediates=True)
-
-    logging.debug("Corpus transformation completed.")
-
-    # Standardise.
-    logging.debug("Conversion of first paper may take longer due to model weight download.")
-    standardise_text(publications,
-                     keep_latex=True,
-                     keep_tables=True,
-                     keep_figures=False,
-                     keep_references=False,
-                     force_imrad_structure=True)
-
-    logging.info("Corpus standardisation completed.")
+    # Usage: uv run python -m biomarkit.pipeline <corpus> [options]  (same as the `biomarkit` command)
+    from biomarkit.cli import main
+    main()

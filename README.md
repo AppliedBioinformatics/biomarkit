@@ -143,19 +143,34 @@ Everything is created automatically. Create a new corpus with `load_corpus("my_c
 - Optional: [Ollama](https://ollama.com/download) running `gemma3:12b` (~8 GB), used as an LLM fallback to classify 
 ambiguous section headings. Without it, the pipeline runs, but accuracy in removing paper boilerplate is decreased.
 
-Core dependencies: `pandas`, `pydantic`, `requests`, `playwright`, `plotly`, `openai`, `wiley-tdm`, `mineru[torch]` (4.x), `torch`
+Core dependencies: `pandas`, `pydantic`, `requests`, `playwright`, `plotly`, `openai`, `wiley-tdm`
+
+Optional `mineru` extra (needed to convert PDFs in `transform_text()`): `mineru[torch]` (4.x), `torch`, `torchvision`.
+Downloading, Elsevier XML conversion and standardisation work without it.
 
 MinerU downloads its models (~2–3 GB, into `~/.mineru/models`) automatically the first time `transform_text()` runs.
 To download them ahead of time, run `mineru-kit models download --tier standard`.
 
 ## Installation
-Install with [uv](https://github.com/astral-sh/uv):
+Install with [uv](https://github.com/astral-sh/uv), including PDF conversion:
 
 ```bash
-uv pip install biomarkit
+uv pip install "biomarkit[mineru]"
 ```
 
 Or with pip:
-```python
-pip install biomarkit
+```bash
+pip install "biomarkit[mineru]"
 ```
+
+Leave off `[mineru]` for a lighter install without PyTorch if you only download papers, convert Elsevier XML or
+standardise existing content lists. From a source checkout, use `uv sync --extra mineru --extra dev`.
+
+### Command line
+The whole pipeline can also be run from a terminal:
+
+```bash
+biomarkit my_corpus --scopus-file scopus.csv --build --report
+```
+
+Run `biomarkit --help` for all options (skip stages, MinerU tier, what to keep in the Markdown, worker counts).

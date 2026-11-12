@@ -8,7 +8,7 @@ from biomarkit.config import MINERU_TIER_CHOICES, get_corpus
 MINERU_MIN_MAJOR_VERSION = 4
 
 
-def prepare_bulk_transformation(mineru_tier: str = "standard") -> None:
+def prepare_bulk_transformation(mineru_tier: str = "standard", needs_mineru: bool = True) -> None:
     """
     Carries out pre-flight checks before launching the text-transformation pipeline.
 
@@ -16,6 +16,7 @@ def prepare_bulk_transformation(mineru_tier: str = "standard") -> None:
     ----------
     mineru_tier : str - MinerU parsing tier: "basic" (small models only, CPU-friendly),
         "standard" (default; small models + VLM) or "advanced" (more VLM compute for hard documents).
+    needs_mineru : bool - False when there are no PDFs to convert; skips the MinerU, VLM and GPU checks.
 
     Raises
     ------
@@ -31,13 +32,19 @@ def prepare_bulk_transformation(mineru_tier: str = "standard") -> None:
     check_transformation_filepaths()
     check_cache_for_markdowns()
 
+    # MinerU is an optional extra and only needed for PDFs, so an XML-only run skips these checks.
+    if not needs_mineru:
+        return
+
+    # Before check_gpu(), which imports torch: without the extra the user gets the install hint, not a bare
+    # ModuleNotFoundError.
+    check_mineru()
     remote_vlm = check_vlm_server_config()
     if mineru_tier != "basic" and not remote_vlm and not check_gpu():
         logging.warning(
             f"No GPU recognised and no MINERU_VLM_SERVER_URL set — mineru_tier={mineru_tier!r} will run the "
             f"MinerU VLM on CPU, which is very slow. Consider mineru_tier='basic' or a remote VLM server."
         )
-    check_mineru()
 
 
 def check_vlm_server_config() -> bool:
@@ -93,12 +100,12 @@ def check_mineru() -> str:
         installed = None
     # version() returns None (rather than raising) when the package's metadata is incomplete.
     if not installed:
-        raise ImportError("MinerU is not installed. Install it with: pip install \"mineru[torch]>=4.0.12,<5\"")
+        raise ImportError("MinerU is not installed. Install it with: uv sync --extra mineru  (or: pip install \"biomarkit[mineru]\")")
 
     if int(installed.split(".")[0]) < MINERU_MIN_MAJOR_VERSION:
         raise ImportError(
             f"MinerU {installed} is installed, but biomarkit requires MinerU {MINERU_MIN_MAJOR_VERSION} or newer. "
-            f"Upgrade with: pip install -U \"mineru[torch]>=4.0.12,<5\""
+            f"Upgrade with: uv sync --extra mineru  (or: pip install -U \"biomarkit[mineru]\")"
         )
     logging.info(f"MinerU {installed} found.")
     return installed
