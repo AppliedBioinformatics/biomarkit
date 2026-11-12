@@ -4,12 +4,13 @@ Provides standalone parsing helpers and ElsevierXmlTransformer for use within
 the text-transformation pipeline.
 """
 
+import functools
 import json
 import logging
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from biomarkit.text_download.basemodels.publication import Publication
 from biomarkit.text_transformation.converters.ABC.transformer import Transformer
@@ -37,6 +38,17 @@ NS = {
 }
 
 
+# MathML token symbols -> LaTeX. Single-character keys, so str.translate gives the same result as chained replaces.
+_MATHML_LATEX = str.maketrans({
+    "∑": r"\sum", "∏": r"\prod", "∫": r"\int", "≈": r"\approx", "≠": r"\neq",
+    "≤": r"\leq", "≥": r"\geq", "±": r"\pm", "∞": r"\infty",
+    "α": r"\alpha", "β": r"\beta", "γ": r"\gamma", "δ": r"\delta", "ε": r"\epsilon",
+    "θ": r"\theta", "λ": r"\lambda", "μ": r"\mu", "π": r"\pi", "ρ": r"\rho",
+    "σ": r"\sigma", "τ": r"\tau", "φ": r"\phi", "χ": r"\chi", "ω": r"\omega",
+})
+
+
+@functools.lru_cache(maxsize=None)
 def _ns(tag: str) -> str:
     """Expand a namespace-prefixed tag like 'ce:para' to '{uri}para'."""
     if ":" in tag:
@@ -46,18 +58,25 @@ def _ns(tag: str) -> str:
     return tag
 
 
+def _local(tag: str) -> str:
+    """Strip the namespace from a tag: '{uri}para' -> 'para'."""
+    return tag.rsplit("}", 1)[-1]
+
+
+@functools.lru_cache(maxsize=None)
+def _xpath(path: str) -> str:
+    """Expand a colon-prefixed path like 'ce:caption/ce:simple-para' to its namespaced form."""
+    return "/".join(_ns(p) if p not in (".", "..") else p for p in path.split("/"))
+
+
 def _find(elem: ET.Element, path: str) -> Optional[ET.Element]:
     """Find element using colon-prefixed namespace path."""
-    parts = path.split("/")
-    expanded = "/".join(_ns(p) if p != "." and p != ".." else p for p in parts)
-    return elem.find(expanded)
+    return elem.find(_xpath(path))
 
 
 def _findall(elem: ET.Element, path: str) -> List[ET.Element]:
     """Find all elements using colon-prefixed namespace path."""
-    parts = path.split("/")
-    expanded = "/".join(_ns(p) if p != "." and p != ".." else p for p in parts)
-    return elem.findall(expanded)
+    return elem.findall(_xpath(path))
 
 
 def clean_text(text: str) -> str:
@@ -68,14 +87,13 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
+_SELF_PARSED_TAGS = frozenset({"float-anchor", "display", "math", "formula"})
+
+
 def get_element_text(elem: ET.Element) -> str:
     """Recursively extract and format text from an element, handling inline markup."""
     if elem is None:
         return ""
-
-    tag = elem.tag
-    # Strip namespace for comparison
-    local = tag.rsplit("}", 1)[-1] if "}" in tag else tag
 
     parts: List[str] = []
 
@@ -85,8 +103,9 @@ def get_element_text(elem: ET.Element) -> str:
 
     # Process children
     for child in elem:
-        child_text = get_element_text(child)
-        child_local = child.tag.rsplit("}", 1)[-1] if "}" in child.tag else child.tag
+        child_local = _local(child.tag)
+        # These branches parse the child themselves (or skip it), so its plain text isn't needed.
+        child_text = "" if child_local in _SELF_PARSED_TAGS else get_element_text(child)
 
         if child_local == "italic":
             if child_text.strip():
@@ -133,7 +152,7 @@ def get_element_text(elem: ET.Element) -> str:
 
 def _parse_mathml(elem: ET.Element) -> str:
     """Convert MathML element to LaTeX representation."""
-    local = elem.tag.rsplit("}", 1)[-1] if "}" in elem.tag else elem.tag
+    local = _local(elem.tag)
 
     if local in ("mi", "mn", "mo", "mtext"):
         text = (elem.text or "").strip()
@@ -146,37 +165,7 @@ def _parse_mathml(elem: ET.Element) -> str:
 
         # Convert special mathematical operators to LaTeX
         combined = text + tail
-        latex_operators = {
-            "∑": r"\sum",
-            "∏": r"\prod",
-            "∫": r"\int",
-            "≈": r"\approx",
-            "≠": r"\neq",
-            "≤": r"\leq",
-            "≥": r"\geq",
-            "±": r"\pm",
-            "∞": r"\infty",
-            "α": r"\alpha",
-            "β": r"\beta",
-            "γ": r"\gamma",
-            "δ": r"\delta",
-            "ε": r"\epsilon",
-            "θ": r"\theta",
-            "λ": r"\lambda",
-            "μ": r"\mu",
-            "π": r"\pi",
-            "ρ": r"\rho",
-            "σ": r"\sigma",
-            "τ": r"\tau",
-            "φ": r"\phi",
-            "χ": r"\chi",
-            "ω": r"\omega"
-        }
-
-        for symbol, latex in latex_operators.items():
-            combined = combined.replace(symbol, latex)
-
-        return combined
+        return combined.translate(_MATHML_LATEX)
 
     if local == "msub":
         children = list(elem)
@@ -256,10 +245,10 @@ def _parse_mathml(elem: ET.Element) -> str:
         # Handle matrices/tables
         rows = []
         for child in elem:
-            if child.tag.rsplit("}", 1)[-1] == "mtr":
+            if _local(child.tag) == "mtr":
                 row_cells = []
                 for cell in child:
-                    if cell.tag.rsplit("}", 1)[-1] == "mtd":
+                    if _local(cell.tag) == "mtd":
                         row_cells.append(_parse_mathml(cell))
                 if row_cells:
                     rows.append(" & ".join(row_cells))
@@ -300,7 +289,7 @@ def _extract_formula(elem: ET.Element) -> str:
     # Look for MathML
     math = None
     for descendant in elem.iter():
-        local = descendant.tag.rsplit("}", 1)[-1] if "}" in descendant.tag else descendant.tag
+        local = _local(descendant.tag)
         if local == "math":
             math = descendant
             break
@@ -308,7 +297,7 @@ def _extract_formula(elem: ET.Element) -> str:
     if math is not None:
         latex_content = _parse_mathml(math)
         # Determine if this is a display (block) or inline formula
-        parent_tag = elem.tag.rsplit("}", 1)[-1] if "}" in elem.tag else elem.tag
+        parent_tag = _local(elem.tag)
 
         if parent_tag == "display":
             # Display formula (centered, block-level)
@@ -390,7 +379,7 @@ def extract_title(root: ET.Element) -> str:
         if head is None:
             # head might be unnamespaced inside article
             for child in article:
-                child_local = child.tag.rsplit("}", 1)[-1] if "}" in child.tag else child.tag
+                child_local = _local(child.tag)
                 if child_local == "head":
                     head = child
                     break
@@ -402,7 +391,7 @@ def extract_title(root: ET.Element) -> str:
     # Try from simple-article
     for article in root.iter(_ns("ja:simple-article")):
         for child in article:
-            child_local = child.tag.rsplit("}", 1)[-1] if "}" in child.tag else child.tag
+            child_local = _local(child.tag)
             if child_local in ("simple-head", "head"):
                 title_elem = _find(child, "ce:title")
                 if title_elem is not None:
@@ -410,7 +399,7 @@ def extract_title(root: ET.Element) -> str:
 
     # Fallback: look in any head element
     for head in root.iter():
-        local = head.tag.rsplit("}", 1)[-1] if "}" in head.tag else head.tag
+        local = _local(head.tag)
         if local == "head":
             title_elem = _find(head, "ce:title")
             if title_elem is not None:
@@ -422,40 +411,13 @@ def extract_title(root: ET.Element) -> str:
         return clean_text(title.text or "")
     # Try without default namespace
     for elem in root.iter():
-        local = elem.tag.rsplit("}", 1)[-1] if "}" in elem.tag else elem.tag
+        local = _local(elem.tag)
         if local == "coredata":
             for child in elem:
-                child_local = child.tag.rsplit("}", 1)[-1] if "}" in child.tag else child.tag
+                child_local = _local(child.tag)
                 if child_local == "title":
                     return clean_text(child.text or "")
     return ""
-
-
-def extract_authors(root: ET.Element) -> List[str]:
-    """Extract author names from the article head."""
-    authors = []
-
-    # Find ce:author-group in article head
-    for author_group in root.iter(_ns("ce:author-group")):
-        for author in _findall(author_group, "ce:author"):
-            given = _find(author, "ce:given-name")
-            surname = _find(author, "ce:surname")
-            given_text = clean_text(given.text) if given is not None and given.text else ""
-            surname_text = clean_text(surname.text) if surname is not None and surname.text else ""
-            if surname_text:
-                name = f"{given_text} {surname_text}".strip()
-                authors.append(name)
-
-    if authors:
-        return authors
-
-    # Fallback: dc:creator from coredata
-    for elem in root.iter():
-        local = elem.tag.rsplit("}", 1)[-1] if "}" in elem.tag else elem.tag
-        if local == "creator" and elem.text:
-            authors.append(clean_text(elem.text))
-
-    return authors
 
 
 def extract_abstract(root: ET.Element) -> str:
@@ -477,190 +439,11 @@ def extract_abstract(root: ET.Element) -> str:
 
     # Fallback: dc:description from coredata
     for elem in root.iter():
-        local = elem.tag.rsplit("}", 1)[-1] if "}" in elem.tag else elem.tag
+        local = _local(elem.tag)
         if local == "description" and elem.text:
             return clean_text(elem.text)
 
     return ""
-
-
-def extract_keywords(root: ET.Element) -> List[str]:
-    """Extract keywords."""
-    keywords = []
-
-    # From ce:keywords in article head
-    for kw_group in root.iter(_ns("ce:keywords")):
-        cls = kw_group.get("class", "")
-        if cls == "keyword" or not cls:
-            for kw in _findall(kw_group, "ce:keyword"):
-                text_elem = _find(kw, "ce:text")
-                if text_elem is not None and text_elem.text:
-                    keywords.append(clean_text(text_elem.text))
-
-    if keywords:
-        return keywords
-
-    # Fallback: dcterms:subject
-    for elem in root.iter():
-        local = elem.tag.rsplit("}", 1)[-1] if "}" in elem.tag else elem.tag
-        if local == "subject" and elem.text:
-            keywords.append(clean_text(elem.text))
-
-    return keywords
-
-
-def parse_section(section: ET.Element, level: int = 2, collect_floats: Optional[List[tuple[str, str]]] = None) -> str:
-    """Recursively parse a ce:section into markdown.
-
-    Args:
-        section: The XML section element to parse
-        level: Heading level (default 2)
-        collect_floats: Optional list to collect (content, type) tuples for figures/tables
-    """
-    parts: List[str] = []
-
-    # Get label and title
-    label_elem = _find(section, "ce:label")
-    title_elem = _find(section, "ce:section-title")
-
-    label = clean_text(get_element_text(label_elem)) if label_elem is not None else ""
-    title = clean_text(get_element_text(title_elem)) if title_elem is not None else ""
-
-    if title:
-        heading_prefix = "#" * min(level, 6)
-        if label:
-            parts.append(f"{heading_prefix} {label} {title}")
-        else:
-            parts.append(f"{heading_prefix} {title}")
-
-    # Process paragraphs and child sections in document order
-    for child in section:
-        child_local = child.tag.rsplit("}", 1)[-1] if "}" in child.tag else child.tag
-
-        if child_local == "para" or child_local == "simple-para":
-            text = clean_text(get_element_text(child))
-            if text:
-                parts.append(text)
-
-        elif child_local == "section":
-            sub = parse_section(child, level=level + 1, collect_floats=collect_floats)
-            if sub:
-                parts.append(sub)
-
-        elif child_local == "figure":
-            fig_text = parse_figure(child)
-            if fig_text:
-                parts.append(fig_text)
-                # Collect for potential reorganization
-                if collect_floats is not None:
-                    collect_floats.append((fig_text, "figure"))
-
-        elif child_local == "table":
-            table_text = parse_table(child)
-            if table_text:
-                if collect_floats is not None:
-                    # Defer to Tables section rather than embedding inline
-                    collect_floats.append((table_text, "table"))
-                else:
-                    parts.append(table_text)
-
-    return "\n\n".join(parts)
-
-
-def parse_figure(fig: ET.Element) -> str:
-    """Parse a ce:figure element into a markdown reference."""
-    label_elem = _find(fig, "ce:label")
-    label = clean_text(label_elem.text) if label_elem is not None and label_elem.text else ""
-
-    caption_text = ""
-    caption = _find(fig, "ce:caption")
-    if caption is not None:
-        for para in caption.iter(_ns("ce:simple-para")):
-            caption_text = clean_text(get_element_text(para))
-            break
-
-    if label and caption_text:
-        return f"[{label}: {caption_text}]"
-    elif label:
-        return f"[{label}]"
-    return ""
-
-
-def parse_table(table: ET.Element) -> str:
-    """Parse a ce:table element into markdown table format."""
-    parts: List[str] = []
-
-    # Table label and caption
-    label_elem = _find(table, "ce:label")
-    label = clean_text(label_elem.text) if label_elem is not None and label_elem.text else ""
-
-    caption_text = ""
-    caption = _find(table, "ce:caption")
-    if caption is not None:
-        for para in caption.iter(_ns("ce:simple-para")):
-            caption_text = clean_text(get_element_text(para))
-            break
-
-    if label:
-        parts.append(f"**{label}**" + (f": {caption_text}" if caption_text else ""))
-
-    # Parse CALS table structure
-    tgroup = None
-    for child in table.iter():
-        child_local = child.tag.rsplit("}", 1)[-1] if "}" in child.tag else child.tag
-        if child_local == "tgroup":
-            tgroup = child
-            break
-
-    if tgroup is not None:
-        rows_data = _parse_cals_tgroup(tgroup)
-        if rows_data:
-            header, body = rows_data
-            if header:
-                # Calculate maximum column count across all rows
-                max_cols = len(header)
-                for row in body:
-                    max_cols = max(max_cols, len(row))
-
-                # Extend header if data rows have more columns
-                while len(header) < max_cols:
-                    header.append(f"Col {len(header) + 1}")
-
-                # Add blank line before table for proper markdown separation
-                parts.append("")
-
-                # Generate table header
-                parts.append("| " + " | ".join(header) + " |")
-                parts.append("| " + " | ".join("---" for _ in header) + " |")
-
-                # Generate table rows with normalized column count
-                for row in body:
-                    # Pad row to match header length
-                    while len(row) < max_cols:
-                        row.append("")
-                    # Truncate if somehow longer (safety)
-                    row = row[:max_cols]
-                    parts.append("| " + " | ".join(row) + " |")
-
-                # Add blank line after table for proper markdown separation
-                parts.append("")
-
-    # Table footnotes
-    for footnote in table.iter(_ns("ce:table-footnote")):
-        fn_label = ""
-        fn_text = ""
-        fl = _find(footnote, "ce:label")
-        if fl is not None and fl.text:
-            fn_label = fl.text.strip()
-        for np in footnote.iter(_ns("ce:note-para")):
-            fn_text = clean_text(get_element_text(np))
-            break
-        if fn_label and fn_text:
-            parts.append(f"^{fn_label}^ {fn_text}")
-        elif fn_text:
-            parts.append(fn_text)
-
-    return "\n".join(parts) if parts else ""
 
 
 def _parse_cals_tgroup(tgroup: ET.Element):
@@ -669,18 +452,18 @@ def _parse_cals_tgroup(tgroup: ET.Element):
     body_rows: List[List[str]] = []
 
     for child in tgroup.iter():
-        child_local = child.tag.rsplit("}", 1)[-1] if "}" in child.tag else child.tag
+        child_local = _local(child.tag)
 
         if child_local == "thead":
             for row in child.iter():
-                row_local = row.tag.rsplit("}", 1)[-1] if "}" in row.tag else row.tag
+                row_local = _local(row.tag)
                 if row_local == "row":
                     header_cells = _parse_cals_row(row)
                     break  # Only first header row
 
         elif child_local == "tbody":
             for row in child.iter():
-                row_local = row.tag.rsplit("}", 1)[-1] if "}" in row.tag else row.tag
+                row_local = _local(row.tag)
                 if row_local == "row":
                     body_rows.append(_parse_cals_row(row))
 
@@ -693,72 +476,13 @@ def _parse_cals_row(row: ET.Element) -> List[str]:
     """Extract cell text from a CALS row."""
     cells = []
     for child in row:
-        child_local = child.tag.rsplit("}", 1)[-1] if "}" in child.tag else child.tag
+        child_local = _local(child.tag)
         if child_local == "entry":
             cell_text = clean_text(get_element_text(child))
             # Escape pipe characters in cell content
             cell_text = cell_text.replace("|", "\\|")
             cells.append(cell_text)
     return cells
-
-
-def parse_body_sections(root: ET.Element, collect_floats: Optional[List[tuple[str, str]]] = None) -> str:
-    """Find and parse all body sections.
-
-    Args:
-        root: Root XML element
-        collect_floats: Optional list to collect (content, type) tuples for figures/tables
-    """
-    parts: List[str] = []
-
-    # Find ce:sections within body
-    for elem in root.iter(_ns("ce:sections")):
-        for child in elem:
-            child_local = child.tag.rsplit("}", 1)[-1] if "}" in child.tag else child.tag
-            if child_local == "section":
-                section_md = parse_section(child, level=2, collect_floats=collect_floats)
-                if section_md:
-                    parts.append(section_md)
-        break  # Only process first ce:sections block
-
-    return "\n\n".join(parts)
-
-
-def extract_floats(root: ET.Element) -> Dict[str, tuple[str, str]]:
-    """Extract figures and tables from ce:floats for reference.
-
-    Returns:
-        Dict mapping element IDs to (content, type) tuples where type is 'figure' or 'table'.
-    """
-    floats = {}
-    for float_block in root.iter(_ns("ce:floats")):
-        for child in float_block:
-            child_local = child.tag.rsplit("}", 1)[-1] if "}" in child.tag else child.tag
-            elem_id = child.get("id", "")
-            if child_local == "figure":
-                content = parse_figure(child)
-                if content:
-                    floats[elem_id] = (content, "figure")
-            elif child_local == "table":
-                content = parse_table(child)
-                if content:
-                    floats[elem_id] = (content, "table")
-    return floats
-
-
-def extract_acknowledgments(root: ET.Element) -> str:
-    """Extract acknowledgments section."""
-    for ack in root.iter(_ns("ce:acknowledgment")):
-        paras = []
-        for child in ack:
-            child_local = child.tag.rsplit("}", 1)[-1] if "}" in child.tag else child.tag
-            if child_local == "para" or child_local == "simple-para":
-                text = clean_text(get_element_text(child))
-                if text:
-                    paras.append(text)
-        if paras:
-            return "\n\n".join(paras)
-    return ""
 
 
 def extract_references(root: ET.Element) -> List[str]:
@@ -943,7 +667,7 @@ def _table_block(table: ET.Element) -> dict | None:
 
     html = None
     for child in table.iter():
-        if child.tag.rsplit("}", 1)[-1] == "tgroup":
+        if _local(child.tag) == "tgroup":
             rows_data = _parse_cals_tgroup(child)
             if rows_data:
                 header, body = rows_data
@@ -984,7 +708,7 @@ def _section_to_blocks(section: ET.Element, level: int = 2) -> list:
         blocks.append(_title_block(heading, level))
 
     for child in section:
-        local = child.tag.rsplit("}", 1)[-1] if "}" in child.tag else child.tag
+        local = _local(child.tag)
         if local in ("para", "simple-para"):
             text = clean_text(get_element_text(child))
             if text:
@@ -1031,7 +755,7 @@ def parse_elsevier_xml_to_blocks(xml_path: str) -> list:
 
     for elem in root.iter(_ns("ce:sections")):
         for child in elem:
-            local = child.tag.rsplit("}", 1)[-1] if "}" in child.tag else child.tag
+            local = _local(child.tag)
             if local == "section":
                 blocks.extend(_section_to_blocks(child, level=2))
         break  # only first ce:sections block
@@ -1039,7 +763,7 @@ def parse_elsevier_xml_to_blocks(xml_path: str) -> list:
     # Tables from ce:floats that were not inline in a section
     for float_block in root.iter(_ns("ce:floats")):
         for child in float_block:
-            local = child.tag.rsplit("}", 1)[-1] if "}" in child.tag else child.tag
+            local = _local(child.tag)
             if local == "table":
                 tb = _table_block(child)
                 if tb:

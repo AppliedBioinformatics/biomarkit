@@ -7,12 +7,7 @@ from biomarkit.text_transformation.converters.elsevier2json import (
     clean_text,
     get_element_text,
     extract_title,
-    extract_authors,
     extract_abstract,
-    extract_keywords,
-    parse_figure,
-    parse_table,
-    parse_body_sections,
     extract_references,
     _parse_mathml,
     _spans,
@@ -136,23 +131,6 @@ def test_extract_title_missing_returns_empty():
 
 
 # ---------------------------------------------------------------------------
-# extract_authors
-# ---------------------------------------------------------------------------
-
-def test_extract_authors_single():
-    root = _root(_article_xml(author_given="Jane", author_surname="Smith"))
-    authors = extract_authors(root)
-    assert len(authors) == 1
-    assert "Smith" in authors[0]
-    assert "Jane" in authors[0]
-
-
-def test_extract_authors_no_authors_returns_empty():
-    root = _root(_MINIMAL_XML)
-    assert extract_authors(root) == []
-
-
-# ---------------------------------------------------------------------------
 # extract_abstract
 # ---------------------------------------------------------------------------
 
@@ -164,100 +142,6 @@ def test_extract_abstract_text():
 def test_extract_abstract_missing_returns_empty():
     root = _root(_MINIMAL_XML)
     assert extract_abstract(root) == ""
-
-
-# ---------------------------------------------------------------------------
-# extract_keywords
-# ---------------------------------------------------------------------------
-
-def test_extract_keywords():
-    root = _root(_article_xml(keywords=["biomarker", "machine learning"]))
-    kws = extract_keywords(root)
-    assert "biomarker" in kws
-    assert "machine learning" in kws
-
-
-def test_extract_keywords_none_returns_empty():
-    root = _root(_MINIMAL_XML)
-    assert extract_keywords(root) == []
-
-
-# ---------------------------------------------------------------------------
-# parse_figure
-# ---------------------------------------------------------------------------
-
-def test_parse_figure_label_and_caption():
-    xml = (
-        f'<ce:figure xmlns:ce="{CE}">'
-        f'<ce:label xmlns:ce="{CE}">Fig. 1</ce:label>'
-        f'<ce:caption xmlns:ce="{CE}">'
-        f'<ce:simple-para xmlns:ce="{CE}">A caption.</ce:simple-para>'
-        f'</ce:caption>'
-        f'</ce:figure>'
-    )
-    result = parse_figure(ET.fromstring(xml))
-    assert "Fig. 1" in result
-    assert "A caption." in result
-
-
-def test_parse_figure_label_only():
-    xml = f'<ce:figure xmlns:ce="{CE}"><ce:label xmlns:ce="{CE}">Fig. 2</ce:label></ce:figure>'
-    assert parse_figure(ET.fromstring(xml)) == "[Fig. 2]"
-
-
-def test_parse_figure_empty_returns_empty():
-    xml = f'<ce:figure xmlns:ce="{CE}"/>'
-    assert parse_figure(ET.fromstring(xml)) == ""
-
-
-# ---------------------------------------------------------------------------
-# parse_table
-# ---------------------------------------------------------------------------
-
-def test_parse_table_label_and_caption():
-    xml = (
-        f'<ce:table xmlns:ce="{CE}">'
-        f'<ce:label xmlns:ce="{CE}">Table 1</ce:label>'
-        f'<ce:caption xmlns:ce="{CE}">'
-        f'<ce:simple-para xmlns:ce="{CE}">Summary of results.</ce:simple-para>'
-        f'</ce:caption>'
-        f'</ce:table>'
-    )
-    result = parse_table(ET.fromstring(xml))
-    assert "Table 1" in result
-    assert "Summary of results." in result
-
-
-def test_parse_table_with_rows():
-    xml = (
-        f'<ce:table xmlns:ce="{CE}">'
-        f'<ce:label xmlns:ce="{CE}">Table 2</ce:label>'
-        f'<tgroup>'
-        f'<thead><row><entry>Col A</entry><entry>Col B</entry></row></thead>'
-        f'<tbody>'
-        f'<row><entry>1</entry><entry>2</entry></row>'
-        f'<row><entry>3</entry><entry>4</entry></row>'
-        f'</tbody>'
-        f'</tgroup>'
-        f'</ce:table>'
-    )
-    result = parse_table(ET.fromstring(xml))
-    assert "Col A" in result
-    assert "Col B" in result
-    assert "| 1 | 2 |" in result
-
-
-def test_parse_table_pipe_escaped_in_cells():
-    xml = (
-        f'<ce:table xmlns:ce="{CE}">'
-        f'<tgroup>'
-        f'<thead><row><entry>H1</entry></row></thead>'
-        f'<tbody><row><entry>a|b</entry></row></tbody>'
-        f'</tgroup>'
-        f'</ce:table>'
-    )
-    result = parse_table(ET.fromstring(xml))
-    assert r"a\|b" in result
 
 
 # ---------------------------------------------------------------------------
@@ -287,51 +171,6 @@ def test_parse_mathml_greek_symbol_converted():
     MML = "http://www.w3.org/1998/Math/MathML"
     elem = ET.fromstring(f'<mi xmlns="{MML}">α</mi>')
     assert r"\alpha" in _parse_mathml(elem)
-
-
-# ---------------------------------------------------------------------------
-# parse_body_sections
-# ---------------------------------------------------------------------------
-
-def test_parse_body_sections_extracts_heading_and_para():
-    xml = (
-        f'<root xmlns:ce="{CE}">'
-        f'<ce:sections>'
-        f'<ce:section>'
-        f'<ce:section-title>Introduction</ce:section-title>'
-        f'<ce:para>First paragraph.</ce:para>'
-        f'</ce:section>'
-        f'</ce:sections>'
-        f'</root>'
-    )
-    result = parse_body_sections(ET.fromstring(xml))
-    assert "Introduction" in result
-    assert "First paragraph." in result
-
-
-def test_parse_body_sections_empty_when_no_sections():
-    xml = f'<root xmlns:ce="{CE}"/>'
-    assert parse_body_sections(ET.fromstring(xml)) == ""
-
-
-def test_parse_body_sections_nested_subsection():
-    xml = (
-        f'<root xmlns:ce="{CE}">'
-        f'<ce:sections>'
-        f'<ce:section>'
-        f'<ce:section-title>Methods</ce:section-title>'
-        f'<ce:section>'
-        f'<ce:section-title>Data collection</ce:section-title>'
-        f'<ce:para>We collected data.</ce:para>'
-        f'</ce:section>'
-        f'</ce:section>'
-        f'</ce:sections>'
-        f'</root>'
-    )
-    result = parse_body_sections(ET.fromstring(xml))
-    assert "Methods" in result
-    assert "Data collection" in result
-    assert "We collected data." in result
 
 
 # ---------------------------------------------------------------------------
