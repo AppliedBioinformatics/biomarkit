@@ -14,6 +14,8 @@ from biomarkit.text_transformation.converters.elsevier2json import (
     _para_block,
     _title_block,
     _table_block,
+    _extract_formula,
+    _enhance_text_formulas,
     parse_elsevier_xml_to_blocks,
 )
 
@@ -401,3 +403,40 @@ def test_parse_elsevier_xml_to_blocks_body_sections(tmp_path):
     blocks = parse_elsevier_xml_to_blocks(str(xml_path))[0]
     assert any("Methods" in str(b) for b in blocks)
     assert any("We did things." in str(b) for b in blocks)
+
+
+# ---------------------------------------------------------------------------
+# HTML escaping and plain-text formulas
+# ---------------------------------------------------------------------------
+
+def test_table_block_escapes_html_in_cells():
+    xml = (
+        f'<ce:table xmlns:ce="{CE}">'
+        f'<tgroup><tbody><row><entry>a&lt;b &amp; c|d</entry></row></tbody></tgroup>'
+        f'</ce:table>'
+    )
+    html = _table_block(ET.fromstring(xml))["content"]["html"]
+    assert "<td>a&lt;b &amp; c|d</td>" in html
+    assert "\|" not in html
+
+
+def test_enhance_text_formulas_no_delimiters():
+    assert _enhance_text_formulas("beta = alpha / 2") == r"\beta = \alpha / 2"
+    assert _enhance_text_formulas("S = 1 - Σ p_i^2") == r"S = 1 - \Sigma p_{i}^2"
+
+
+def test_extract_formula_plain_text_single_wrap():
+    elem = ET.fromstring(f'<ce:formula xmlns:ce="{CE}">beta = alpha / 2</ce:formula>')
+    formula = _extract_formula(elem)
+    assert formula == r"$\beta = \alpha / 2$"
+    spans = _spans(f"Plain formula {formula} here.")
+    assert [s["type"] for s in spans].count("equation_inline") == 1
+
+
+def test_extract_formula_display_plain_text():
+    formula = _extract_formula(ET.fromstring(f'<ce:display xmlns:ce="{CE}">x = 1</ce:display>'))
+    assert formula.startswith("$$\n") and formula.endswith("\n$$")
+
+
+def test_extract_formula_empty_returns_empty():
+    assert _extract_formula(ET.fromstring(f'<ce:formula xmlns:ce="{CE}"/>')) == ""

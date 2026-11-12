@@ -9,6 +9,7 @@ import json
 import logging
 import re
 import xml.etree.ElementTree as ET
+from html import escape as html_escape
 from pathlib import Path
 from typing import List, Optional
 
@@ -294,81 +295,51 @@ def _extract_formula(elem: ET.Element) -> str:
             math = descendant
             break
 
+    # Display (block) or inline formula.
+    parent_tag = _local(elem.tag)
+
     if math is not None:
         latex_content = _parse_mathml(math)
-        # Determine if this is a display (block) or inline formula
-        parent_tag = _local(elem.tag)
+    else:
+        # No MathML: convert the plain text. Formulas that are only an image link have no text.
+        latex_content = _enhance_text_formulas(clean_text("".join(elem.itertext())))
+        if not latex_content:
+            return ""
 
-        if parent_tag == "display":
-            # Display formula (centered, block-level)
-            return f"$$\n{latex_content}\n$$"
-        else:
-            # Inline formula
-            return f"${latex_content}$"
+    if parent_tag == "display":
+        return f"$$\n{latex_content}\n$$"
+    return f"${latex_content}$"
 
-    # Fallback to text content with basic LaTeX formatting for common patterns
-    text_content = clean_text("".join(elem.itertext()))
 
-    # Apply basic LaTeX formatting to common mathematical expressions
-    text_content = _enhance_text_formulas(text_content)
-
-    return text_content
+_GREEK_WORDS = {
+    'alpha': r'\alpha', 'beta': r'\beta', 'gamma': r'\gamma', 'delta': r'\delta',
+    'epsilon': r'\epsilon', 'theta': r'\theta', 'lambda': r'\lambda', 'mu': r'\mu',
+    'pi': r'\pi', 'rho': r'\rho', 'sigma': r'\sigma', 'tau': r'\tau',
+    'phi': r'\phi', 'chi': r'\chi', 'omega': r'\omega',
+}
+_GREEK_WORD_RE = re.compile(r'\b(' + '|'.join(_GREEK_WORDS) + r')\b', re.IGNORECASE)
+_TEXT_SYMBOLS = str.maketrans({
+    '±': r'\pm', '∑': r'\sum', '∏': r'\prod', '∫': r'\int', '≈': r'\approx', '≠': r'\neq',
+    '≤': r'\leq', '≥': r'\geq', '∞': r'\infty', 'Σ': r'\Sigma', 'Π': r'\Pi',
+    '⌊': r'\lfloor', '⌋': r'\rfloor', '⌈': r'\lceil', '⌉': r'\rceil', '∂': r'\partial',
+    '∇': r'\nabla', '∀': r'\forall', '∃': r'\exists', '∈': r'\in', '∉': r'\notin',
+    '⊂': r'\subset', '⊃': r'\supset', '⊆': r'\subseteq', '⊇': r'\supseteq',
+    '∩': r'\cap', '∪': r'\cup', '×': r'\times', '÷': r'\div', '√': r'\sqrt{}',
+    '∴': r'\therefore', '∵': r'\because',
+})
 
 
 def _enhance_text_formulas(text: str) -> str:
-    """Apply basic LaTeX formatting to common mathematical expressions in plain text."""
+    """
+    Convert plain-text formula content (from a ce:formula/ce:display without MathML) to LaTeX. Adds no $ delimiters:
+    the caller wraps the whole formula once, so it stays a single inline-equation span.
+    """
     if not text:
         return text
-
-    # Common mathematical expression patterns
-    import re
-
-    # Pattern for subscripts like n_i, p_i, etc.
-    text = re.sub(r'(\w+)_(\w+)', r'$\1_{\2}$', text)
-
-    # Pattern for superscripts like x^2, R^2, etc.
-    text = re.sub(r'(\w+)\^(\w+)', r'$\1^{\2}$', text)
-
-    # Greek letters and mathematical symbols
-    greek_symbols = {
-        'alpha': r'\alpha', 'beta': r'\beta', 'gamma': r'\gamma', 'delta': r'\delta',
-        'epsilon': r'\epsilon', 'theta': r'\theta', 'lambda': r'\lambda', 'mu': r'\mu',
-        'pi': r'\pi', 'rho': r'\rho', 'sigma': r'\sigma', 'tau': r'\tau',
-        'phi': r'\phi', 'chi': r'\chi', 'omega': r'\omega'
-    }
-
-    for word, latex in greek_symbols.items():
-        # Escape the LaTeX command for use in replacement string
-        latex_escaped = latex.replace('\\', r'\\')
-        text = re.sub(rf'\b{word}\b', f'${latex_escaped}$', text, flags=re.IGNORECASE)
-
-    # Mathematical operators and symbols
-    operators = {
-        '±': r'$\pm$', '∑': r'$\sum$', '∏': r'$\prod$', '∫': r'$\int$',
-        '≈': r'$\approx$', '≠': r'$\neq$', '≤': r'$\leq$', '≥': r'$\geq$',
-        '∞': r'$\infty$', 'Σ': r'$\Sigma$', 'Π': r'$\Pi$', '⌊': r'$\lfloor$',
-        '⌋': r'$\rfloor$', '⌈': r'$\lceil$', '⌉': r'$\rceil$', '∂': r'$\partial$',
-        '∇': r'$\nabla$', '∀': r'$\forall$', '∃': r'$\exists$', '∈': r'$\in$',
-        '∉': r'$\notin$', '⊂': r'$\subset$', '⊃': r'$\supset$', '⊆': r'$\subseteq$',
-        '⊇': r'$\supseteq$', '∩': r'$\cap$', '∪': r'$\cup$', '×': r'$\times$',
-        '÷': r'$\div$', '√': r'$\sqrt{}$', '∴': r'$\therefore$', '∵': r'$\because$'
-    }
-
-    for symbol, latex in operators.items():
-        text = text.replace(symbol, latex)
-
-    # Formulas like "S = 1 - Σ[...]" - convert to display format
-    if re.search(r'[A-Z]\s*=.*[∑∏∫Σ]', text):
-        # This looks like a mathematical formula definition
-        text = f"$${text}$$"
-    elif 'formula:' in text.lower() and any(op in text for op in ['=', '∑', 'Σ', '∏', '∫']):
-        # Mathematical expressions following "formula:"
-        parts = text.split(':', 1)
-        if len(parts) == 2:
-            prefix, formula = parts
-            text = f"{prefix}: $${formula.strip()}$$"
-
-    return text
+    text = re.sub(r'(\w+)_(\w+)', r'\1_{\2}', text)
+    text = re.sub(r'(\w+)\^(\w+)', r'\1^{\2}', text)
+    text = _GREEK_WORD_RE.sub(lambda m: _GREEK_WORDS[m.group(1).lower()], text)
+    return text.translate(_TEXT_SYMBOLS)
 
 
 def extract_title(root: ET.Element) -> str:
@@ -478,10 +449,7 @@ def _parse_cals_row(row: ET.Element) -> List[str]:
     for child in row:
         child_local = _local(child.tag)
         if child_local == "entry":
-            cell_text = clean_text(get_element_text(child))
-            # Escape pipe characters in cell content
-            cell_text = cell_text.replace("|", "\\|")
-            cells.append(cell_text)
+            cells.append(clean_text(get_element_text(child)))
     return cells
 
 
@@ -673,10 +641,10 @@ def _table_block(table: ET.Element) -> dict | None:
                 header, body = rows_data
                 rows_html = ""
                 if header:
-                    cells = "".join(f"<th>{c}</th>" for c in header)
+                    cells = "".join(f"<th>{html_escape(c, quote=False)}</th>" for c in header)
                     rows_html += f"<tr>{cells}</tr>"
                 for row in body:
-                    cells = "".join(f"<td>{c}</td>" for c in row)
+                    cells = "".join(f"<td>{html_escape(c, quote=False)}</td>" for c in row)
                     rows_html += f"<tr>{cells}</tr>"
                 html = f"<table>{rows_html}</table>"
             break

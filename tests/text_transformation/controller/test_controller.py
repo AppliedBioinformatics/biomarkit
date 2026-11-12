@@ -336,20 +336,20 @@ def test_prepare_publications_full_pipeline(tmp_path):
 def test_update_missing_cached_json_leaves_none(tmp_path, uncached_publications, caplog):
     from biomarkit.text_transformation.controller.controller import Controller
 
+    from biomarkit.text_download.database.database import update_content_json_filepath
+
     pub = uncached_publications[0]
     pub_file = tmp_path / "pub.pdf"
     pub_file.touch()
 
-    _setup_db([{
-        "doi": pub.doi,
-        "downloaded_from": "publisher",
-        "publication_filepath": str(pub_file),
-        "content_json_filepath": str(tmp_path / "deleted.json"),
-        "final_md_filepath": None,
-    }])
+    # Own database under tmp_path: the shared TMP_DB can't be unlinked reliably on Windows.
+    db = tmp_path / "cache.sqlite"
+    create_database(db)
+    insert_row(doi=pub.doi, downloaded_from="publisher", publication_filepath=str(pub_file), db_path=db)
+    update_content_json_filepath(pub.doi, str(tmp_path / "deleted.json"), db)
 
     controller = Controller(publication_list=[pub])
-    controller.cache = TMP_DB
+    controller.cache = db
     with caplog.at_level("WARNING"):
         controller._update_publications_cache_state()
 
