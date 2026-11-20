@@ -9,7 +9,7 @@ from biomarkit.text_download.apis.abc.publisher_api import PublisherApi
     ("elsevier", "ElsevierClient", 1),
     ("mdpi", "MdpiClient", 1),
     ("frontiers", "FrontiersClient", 5),
-    ("springer", "SpringerClient", 5),
+    ("springer", "SpringerClient", 1),
     ("taylor_and_francis", "TaylorFrancisClient", 10),
     ("am_phyto_soc", "AmPhytoSocClient", 10),
     ("copernicus", "CopernicusClient", 10),
