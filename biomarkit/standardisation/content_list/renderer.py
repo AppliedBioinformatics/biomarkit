@@ -5,6 +5,7 @@ from pathlib import Path
 from biomarkit.standardisation.content_list.schema import (
     ChartBlock,
     ContentBlock,
+    EquationInterlineBlock,
     ImageBlock,
     InlineEquation,
     ListBlock,
@@ -42,7 +43,15 @@ def _render_table(block: TableBlock) -> str:
         parts.append(f"**{caption}**")
     if block.content.html:
         parts.append(block.content.html)
+    footnote = _render_spans(block.content.table_footnote)
+    if footnote.strip():
+        parts.append(footnote)
     return "\n\n".join(parts) if parts else ""
+
+
+def _render_equation(block: EquationInterlineBlock) -> str:
+    math = block.content.math_content.strip()
+    return f"$$\n{math}\n$$" if math else ""
 
 
 def _resolve_image_path(raw: str, images_dir: Path | None) -> str:
@@ -60,6 +69,9 @@ def _render_image(block: ImageBlock, images_dir: Path | None) -> str:
     parts = [f"![{caption}]({path})"]
     if caption:
         parts.append(f"*{caption}*")
+    footnote = _render_spans(block.content.image_footnote)
+    if footnote.strip():
+        parts.append(footnote)
     return "\n\n".join(parts)
 
 
@@ -70,6 +82,9 @@ def _render_chart(block: ChartBlock, images_dir: Path | None) -> str:
     parts = [f"![{caption}]({path})"]
     if caption:
         parts.append(f"*{caption}*")
+    footnote = _render_spans(block.content.chart_footnote)
+    if footnote.strip():
+        parts.append(footnote)
     return "\n\n".join(parts)
 
 
@@ -106,6 +121,10 @@ def render(blocks: list[ContentBlock], images_dir: Path | None = None) -> str:
                 parts.append(text)
         elif isinstance(block, TableBlock):
             text = _render_table(block)
+            if text:
+                parts.append(text)
+        elif isinstance(block, EquationInterlineBlock):
+            text = _render_equation(block)
             if text:
                 parts.append(text)
         elif isinstance(block, ImageBlock):

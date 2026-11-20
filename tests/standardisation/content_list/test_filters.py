@@ -271,3 +271,32 @@ def test_remove_references_higher_level_heading_not_absorbed():
 def test_remove_references_no_references_section_unchanged():
     blocks = [make_paragraph("body"), make_title("Discussion", level=1)]
     assert remove_references(blocks) == blocks
+
+# ---------------------------------------------------------------------------
+# Removed blocks leave only the placeholder in rendered output
+# ---------------------------------------------------------------------------
+
+def test_remove_tables_drops_caption_and_footnote_from_render():
+    from biomarkit.standardisation.content_list.renderer import render
+    table = TableBlock(
+        type="table",
+        content=TableContent(
+            table_caption=[TextSpan(type="text", content="Table 1")],
+            table_footnote=[TextSpan(type="text", content="* p < 0.05")],
+            html="<table></table>",
+        ),
+        bbox=_BBOX,
+    )
+    assert render(remove_tables([table])) == "<table_removed>"
+
+
+def test_remove_figures_drops_footnote_from_render():
+    from biomarkit.standardisation.content_list.renderer import render
+    image = make_image_block()
+    image.content.image_footnote = [TextSpan(type="text", content="Scale bar")]
+    assert render(remove_figures([image])) == "<figure_removed>"
+
+
+def test_remove_latex_display_equation_renders_placeholder():
+    from biomarkit.standardisation.content_list.renderer import render
+    assert render(remove_latex([make_equation_block()])) == "<latex_removed>"

@@ -45,4 +45,5 @@ def test_cleaner_produces_markdown_from_fixture(tmp_path, active_corpus):
     assert markdown.startswith("#")
     assert "<table" in markdown
     assert "](" in markdown  # image/chart links
+    assert "$$\nG = \\frac {\\mathsf {Z Z ^ {\\prime}}}{\\sum p (1 - p)}\n$$" in markdown  # display equation
     assert pub.final_md_filepath == active_corpus.final_md_dir / "paper.md"

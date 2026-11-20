@@ -2,6 +2,7 @@
 from pathlib import Path
 from biomarkit.standardisation.content_list.schema import (
     ChartBlock, ChartContent,
+    EquationInterlineBlock, EquationInterlineContent,
     ImageBlock, ImageContent, ImageSource,
     InlineEquation,
     ListBlock, ListContent, ListItem,
@@ -31,12 +32,13 @@ def make_title(text: str, level: int = 1) -> TitleBlock:
     )
 
 
-def make_table(caption: str = "", html: str = "<table></table>") -> TableBlock:
+def make_table(caption: str = "", html: str = "<table></table>", footnote: str = "") -> TableBlock:
     caption_spans = [TextSpan(type="text", content=caption)] if caption else []
+    footnote_spans = [TextSpan(type="text", content=footnote)] if footnote else []
     return TableBlock(
         type="table",
         content=TableContent(
-            image_source=None, table_caption=caption_spans, table_footnote=[],
+            image_source=None, table_caption=caption_spans, table_footnote=footnote_spans,
             html=html, table_nest_level=0,
         ),
         bbox=_BBOX,
@@ -160,6 +162,36 @@ def test_empty_table_skipped():
     assert result == ""
 
 
+def test_table_footnote_rendered_after_html():
+    result = render([make_table(caption="Table 1", html="<table></table>", footnote="* p < 0.05")])
+    assert result == "**Table 1**\n\n<table></table>\n\n* p < 0.05"
+
+
+def test_table_with_only_footnote_not_dropped():
+    assert render([make_table(html="", footnote="Note")]) == "Note"
+
+
+# ---------------------------------------------------------------------------
+# Display equation rendering
+# ---------------------------------------------------------------------------
+
+def make_equation(math: str) -> EquationInterlineBlock:
+    return EquationInterlineBlock(
+        type="equation_interline",
+        content=EquationInterlineContent(math_content=math, math_type="latex"),
+        bbox=_BBOX,
+    )
+
+
+def test_display_equation_rendered_in_order():
+    result = render([make_paragraph("before"), make_equation(r"E=mc^2"), make_paragraph("after")])
+    assert result == "before\n\n$$\nE=mc^2\n$$\n\nafter"
+
+
+def test_blank_display_equation_skipped():
+    assert render([make_equation("  "), make_paragraph("kept")]) == "kept"
+
+
 # ---------------------------------------------------------------------------
 # List rendering
 # ---------------------------------------------------------------------------
@@ -225,6 +257,12 @@ def test_image_no_caption_no_italic():
     assert "*" not in result
 
 
+def test_image_footnote_rendered():
+    block = make_image(caption="Cap", path="fig.png")
+    block.content.image_footnote = [TextSpan(type="text", content="Scale bar 10 µm")]
+    assert render([block]).endswith("*Cap*\n\nScale bar 10 µm")
+
+
 def test_image_path_resolved_with_images_dir():
     result = render([make_image(path="fig1.png")], images_dir=Path("auto"))
     assert "auto/fig1.png" in result
@@ -253,6 +291,12 @@ def test_chart_renders_markdown_link():
 def test_chart_with_caption_renders_italic():
     result = render([make_chart(caption="Chart caption", path="chart.png")])
     assert "*Chart caption*" in result
+
+
+def test_chart_footnote_rendered():
+    block = make_chart(caption="Cap", path="chart.png")
+    block.content.chart_footnote = [TextSpan(type="text", content="Source: X")]
+    assert render([block]).endswith("*Cap*\n\nSource: X")
 
 
 def test_chart_path_resolved_with_images_dir():

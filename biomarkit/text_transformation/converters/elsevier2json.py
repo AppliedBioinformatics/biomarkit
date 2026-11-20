@@ -654,6 +654,15 @@ def _table_block(table: ET.Element) -> dict | None:
                 html = f"<table>{rows_html}</table>"
             break
 
+    footnotes = []
+    for fn in _findall(table, "ce:table-footnote"):
+        fn_label = clean_text(get_element_text(_find(fn, "ce:label")))
+        fn_text = " ".join(clean_text(get_element_text(p)) for p in _findall(fn, "ce:note-para"))
+        footnotes.append(f"{fn_label} {fn_text}".strip())
+    for para in _findall(table, "ce:legend/ce:simple-para"):
+        footnotes.append(clean_text(get_element_text(para)))
+    footnote_text = " ".join(f for f in footnotes if f)
+
     if not caption_spans and html is None:
         return None
 
@@ -661,7 +670,7 @@ def _table_block(table: ET.Element) -> dict | None:
         "type": "table",
         "content": {
             "table_caption": caption_spans,
-            "table_footnote": [],
+            "table_footnote": _spans(footnote_text) if footnote_text else [],
             "html": html,
             "table_nest_level": 1,
         },

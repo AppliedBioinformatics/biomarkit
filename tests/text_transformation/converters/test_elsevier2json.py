@@ -352,6 +352,24 @@ def test_table_block_with_rows_generates_html():
     assert "<th>A</th>" in block["content"]["html"]
 
 
+def test_table_block_extracts_footnotes_and_legend():
+    xml = (
+        f'<ce:table xmlns:ce="{CE}">'
+        f'<ce:caption><ce:simple-para>Cap</ce:simple-para></ce:caption>'
+        f'<ce:table-footnote><ce:label>a</ce:label><ce:note-para>Mean of three replicates.</ce:note-para></ce:table-footnote>'
+        f'<ce:legend><ce:simple-para>SD, standard deviation.</ce:simple-para></ce:legend>'
+        f'</ce:table>'
+    )
+    footnote = _table_block(ET.fromstring(xml))["content"]["table_footnote"]
+    text = "".join(s["content"] for s in footnote)
+    assert text == "a Mean of three replicates. SD, standard deviation."
+
+
+def test_table_block_without_footnotes_has_empty_footnote():
+    xml = f'<ce:table xmlns:ce="{CE}"><ce:caption><ce:simple-para>Cap</ce:simple-para></ce:caption></ce:table>'
+    assert _table_block(ET.fromstring(xml))["content"]["table_footnote"] == []
+
+
 # ---------------------------------------------------------------------------
 # parse_elsevier_xml_to_blocks
 # ---------------------------------------------------------------------------
