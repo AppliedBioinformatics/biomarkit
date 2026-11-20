@@ -80,7 +80,6 @@ TMP_DIR = BASE_DIR / "tmp"
 # Client Parameters.
 USER_EMAIL = getenv("USER_EMAIL")
 WILEY_TDM_TOKEN = getenv("WILEY_TDM_TOKEN")
-SPRINGER_API_KEY = getenv("SPRINGER_API_KEY")
 ELSEVIER_API_KEY = getenv("ELSEVIER_API_KEY")
 
 # LLM Settings - fallback section classifier, served by a local Ollama instance by default.
@@ -122,7 +121,7 @@ API_KEY_TO_NAME = {
     "opensource": "",
     "unpaywall": "",
     "wiley": WILEY_TDM_TOKEN,
-    "springer": SPRINGER_API_KEY,
+    "springer": "",
     "elsevier": ELSEVIER_API_KEY,
     "mdpi": "",
     "frontiers": "",

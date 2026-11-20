@@ -111,7 +111,6 @@ All user-facing settings live in `secrets.env` (copy from [`secrets.env.example`
 |---|---|
 | `USER_EMAIL` | Your email address (required by some publisher APIs) |
 | `WILEY_TDM_TOKEN` | Wiley TDM API token (optional) |
-| `SPRINGER_API_KEY` | Springer API key (optional) |
 | `ELSEVIER_API_KEY` | Elsevier API key (optional) |
 | `LLM_BASE_URL` | OpenAI-compatible endpoint for the fallback section classifier (defaults to local [Ollama](https://ollama.com)) |
 | `LLM_MODEL_NAME` | Model used by the fallback classifier (default `gemma3:12b`) |
