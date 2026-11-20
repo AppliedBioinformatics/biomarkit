@@ -17,16 +17,16 @@ def load_corpus(corpus: str | Path, scopus_file: str | Path | None = None,
     Set the active corpus for this session, building it first if it doesn't exist, and return
     Publication objects for every publication already in its download cache.
 
-    All other pipeline functions (download_corpus, transform_text, standardise_text) read and
-    write the corpus loaded here, so call this first.
+    All other pipeline functions (download_corpus, download_dois, transform_text, standardise_text)
+    read and write the corpus loaded here, so call this first.
 
     Parameters
     ----------
     corpus : str | Path
         A corpus name (resolved to <BIOMARKIT_DIR>/corpora/<name>) or a path to a corpus folder.
     scopus_file : str | Path | None, default None
-        Scopus export CSV. Required to build a new corpus; copied into an existing corpus only
-        if it has no scopus.csv yet.
+        Scopus export CSV, copied into the corpus if it has no scopus.csv yet. Not needed for a
+        corpus whose publications come from a DOI list (download_dois).
     build : bool | None, default None
         What to do if the corpus folder doesn't exist. None asks for confirmation when running
         interactively (terminal or notebook) and raises otherwise. True builds without asking
@@ -36,7 +36,8 @@ def load_corpus(corpus: str | Path, scopus_file: str | Path | None = None,
     -------
     list[Publication]
         One Publication per DOI found in the cache, with metadata from the Scopus CSV and
-        filepaths populated wherever they exist in the cache. Empty for a new corpus.
+        filepaths populated wherever they exist in the cache. Empty for a new corpus, and for a
+        corpus without a scopus.csv (call download_dois again to get its cached publications).
     """
     from pydantic import ValidationError
     from biomarkit.config import set_active_corpus
@@ -49,8 +50,6 @@ def load_corpus(corpus: str | Path, scopus_file: str | Path | None = None,
     if not corpus_dir.exists():
         if build is False:
             raise FileNotFoundError(f"Corpus not found at {corpus_dir}.")
-        if scopus_file is None:
-            raise ValueError(f"Corpus not found at {corpus_dir}. Pass scopus_file=... to build a new corpus there.")
         if build is None:
             no_prompt_error = FileNotFoundError(
                 f"Corpus not found at {corpus_dir}. Pass build=True to build it without confirmation."
@@ -76,6 +75,10 @@ def load_corpus(corpus: str | Path, scopus_file: str | Path | None = None,
 
     cached_dois = set(get_all_cached_dois(paths.db))
     if not cached_dois:
+        return []
+
+    if not paths.scopus_csv.exists():
+        logging.info("Corpus has no scopus.csv - call download_dois() with its DOI list to get its publications.")
         return []
 
     raw_df = ftr.load_scopus_csv(paths.scopus_csv)
@@ -131,21 +134,81 @@ def download_corpus(check_opensource: bool = True, generate_report: bool = False
 
     from biomarkit.config import get_corpus
     from biomarkit.text_download.filter import filter_scopus_csv as ftr
-    from biomarkit.text_download.utils.generics import setup_logging, setup_run, clean_publications
-    from biomarkit.text_download.controller.controller import Controller
-    from biomarkit.text_download.apis.router import ApiRouter
-    from biomarkit.text_download.visualisation.text_extraction_report import build_text_download_report
 
-    # Start timing the whole function.
     function_start = perf_counter()
+    _setup_download()
 
-    # Setup & check any downloaded publications are stored in a cache.
+    scopus_csv = get_corpus().scopus_csv
+    if not scopus_csv.exists():
+        raise FileNotFoundError(
+            f"No Scopus CSV found for corpus at {scopus_csv}. "
+            f"Place your Scopus export there, or use download_dois() for a DOI list."
+        )
+
+    return _download(ftr.load_scopus_csv(scopus_csv), check_opensource, generate_report,
+                     infer_publisher_from_doi, function_start)
+
+def download_dois(dois: str | Path | list[str], check_opensource: bool = True, generate_report: bool = False,
+                  infer_publisher_from_doi: bool = True) -> list[Publication]:
+    """
+    Download full-text PDFs and XMLs for a list of DOIs into the active corpus, without a Scopus export.
+
+    Title, year, publisher and abstract are fetched from Crossref (https://api.crossref.org), then the
+    publications go through the same routing as download_corpus(). DOIs Crossref can't resolve (e.g.
+    arXiv/DataCite DOIs) are logged and dropped. Previously downloaded DOIs are loaded from the cache,
+    so re-running with the same list resumes a corpus.
+
+    Parameters
+    ----------
+    dois : str | Path | list[str]
+        A text file with one DOI per line (blank lines and '#' comments skipped), or a list of DOI
+        strings. https://doi.org/ and doi: prefixes are stripped.
+    check_opensource : bool, default True
+        When True, attempt open-access routes before falling back to publisher APIs.
+    generate_report : bool, default False
+        When True, write an HTML download report to the corpus reports folder.
+    infer_publisher_from_doi : bool, default True
+        When True, papers whose Crossref publisher is not recognised get a publisher inferred from
+        their DOI prefix (e.g. 10.1016 -> Elsevier), so they can be routed to that publisher's API client.
+
+    Returns
+    -------
+    list[Publication]
+        All resolved publications, including those loaded from cache, with publication_filepath set
+        where a download exists.
+    """
+    from biomarkit.config import get_corpus
+    from biomarkit.text_download.filter.crossref_metadata import read_dois, fetch_crossref_metadata
+
+    get_corpus()  # fail before querying Crossref if no corpus is loaded
+    function_start = perf_counter()
+    _setup_download()
+
+    doi_list = read_dois(dois)
+    df = fetch_crossref_metadata(doi_list)
+    if df.empty:
+        raise ValueError(f"None of the {len(doi_list)} DOI(s) could be resolved by Crossref.")
+
+    return _download(df, check_opensource, generate_report, infer_publisher_from_doi, function_start)
+
+def _setup_download() -> None:
+    """Logging, corpus folders and cache, and removal of downloads missing from the cache."""
+    from biomarkit.text_download.utils.generics import setup_logging, setup_run, clean_publications
+
     setup_logging(level=logging.INFO)
     setup_run()
     clean_publications()
 
-    # Load input query and filter.
-    raw_df = ftr.load_scopus_csv(get_corpus().scopus_csv)
+def _download(raw_df, check_opensource: bool, generate_report: bool, infer_publisher_from_doi: bool,
+              function_start: float) -> list[Publication]:
+    """
+    Shared download stage for download_corpus() and download_dois(). raw_df has the columns load_scopus_csv()
+    produces (Title, Year, DOI, Publisher and optionally Abstract).
+    """
+    from biomarkit.text_download.filter import filter_scopus_csv as ftr
+    from biomarkit.text_download.controller.controller import Controller
+    from biomarkit.text_download.apis.router import ApiRouter
+    from biomarkit.text_download.visualisation.text_extraction_report import build_text_download_report
 
     # Filter + Synchronize. (Can add more steps here)
     df = ftr.remove_imperfect_rows(df=raw_df)

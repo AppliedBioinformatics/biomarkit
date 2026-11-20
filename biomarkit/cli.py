@@ -3,14 +3,16 @@ import argparse
 import logging
 
 from biomarkit.config import MINERU_TIER_CHOICES
-from biomarkit.pipeline import load_corpus, download_corpus, transform_text, standardise_text
+from biomarkit.pipeline import load_corpus, download_corpus, download_dois, transform_text, standardise_text
 from biomarkit.text_download.utils.generics import setup_logging
 
 
 def main(argv=None):
     p = argparse.ArgumentParser(prog="biomarkit", description="Download, convert and standardise a Scopus corpus.")
     p.add_argument("corpus", help="Corpus name (under BIOMARKIT_DIR/corpora) or path to a corpus folder.")
-    p.add_argument("--scopus-file", help="Scopus export CSV; required to build a new corpus.")
+    source = p.add_mutually_exclusive_group()
+    source.add_argument("--scopus-file", help="Scopus export CSV to build the corpus from.")
+    source.add_argument("--dois-file", help="Text file of DOIs (one per line); metadata is fetched from Crossref.")
     p.add_argument("--build", action="store_true", help="Build the corpus without asking if it doesn't exist.")
     for stage in ("download", "transform", "standardise"):
         p.add_argument(f"--skip-{stage}", action="store_true", help=f"Skip the {stage} stage.")
@@ -29,7 +31,10 @@ def main(argv=None):
     publications = load_corpus(args.corpus, scopus_file=args.scopus_file, build=True if args.build else None)
 
     if not args.skip_download:
-        publications = download_corpus(generate_report=args.report)
+        if args.dois_file:
+            publications = download_dois(args.dois_file, generate_report=args.report)
+        else:
+            publications = download_corpus(generate_report=args.report)
     if not args.skip_transform:
         publications = transform_text(publications, mineru_tier=args.mineru_tier,
                                       mineru_batch_size=args.mineru_batch_size,

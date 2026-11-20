@@ -237,12 +237,26 @@ def test_load_corpus_build_false_raises_when_missing(tmp_path, scopus_src):
     assert not (tmp_path / "missing").exists()
 
 
-def test_load_corpus_missing_without_scopus_file_raises_before_prompt(tmp_path):
-    with patch("biomarkit.pipeline._can_prompt", return_value=True), \
-         patch("builtins.input") as mock_input:
-        with pytest.raises(ValueError, match="scopus_file"):
-            load_corpus(tmp_path / "missing")
-    mock_input.assert_not_called()
+def test_load_corpus_build_true_without_scopus_file(tmp_path):
+    # A corpus for download_dois() has no Scopus CSV.
+    corpus_dir = tmp_path / "doi_corpus"
+    assert load_corpus(corpus_dir, build=True) == []
+
+    for subdir in _SUBDIRS:
+        assert (corpus_dir / subdir).is_dir()
+    assert not (corpus_dir / "scopus.csv").exists()
+
+
+def test_load_corpus_cached_corpus_without_scopus_csv_returns_empty(tmp_path):
+    corpus_dir = tmp_path / "doi_corpus"
+    load_corpus(corpus_dir, build=True)
+    pdf = corpus_dir / "manuscripts" / "paper.pdf"
+    pdf.write_bytes(b"%PDF")
+    create_database(corpus_dir / "sqlite.db")
+    insert_row(doi="10.1234/a", downloaded_from="opensource", publication_filepath=str(pdf),
+               db_path=corpus_dir / "sqlite.db")
+
+    assert load_corpus(corpus_dir) == []
 
 
 def test_load_corpus_raises_if_scopus_file_missing(tmp_path):
@@ -396,3 +410,54 @@ def test_transform_text_routes_bioc_and_elsevier_xmls(tmp_path):
 
     assert mock_bioc.call_args.kwargs["publication_list"] == [bioc]
     assert mock_els.call_args.kwargs["publication_list"] == [elsevier]
+
+
+# ---------------------------------------------------------------------------
+# download_dois
+# ---------------------------------------------------------------------------
+
+def test_download_dois_routes_crossref_publications_without_scopus_csv(tmp_path):
+    import pandas as pd
+    from biomarkit.pipeline import download_dois
+
+    load_corpus(tmp_path / "doi_corpus", build=True)
+    crossref_df = pd.DataFrame([
+        {"Title": "Paper A", "Year": 2020, "DOI": "10.1016/j.a.2020.1", "Publisher": "Elsevier BV", "Abstract": "Abs."},
+        {"Title": "Paper B", "Year": 2021, "DOI": "10.3390/b1", "Publisher": "MDPI AG", "Abstract": None},
+    ])
+
+    with patch("biomarkit.text_download.filter.crossref_metadata.fetch_crossref_metadata",
+               return_value=crossref_df) as mock_fetch, \
+         patch("biomarkit.text_download.apis.router.ApiRouter") as mock_router:
+        mock_router.return_value.finalise_publication_list.side_effect = lambda results: mock_router.call_args.args[0]
+        pubs = download_dois(["10.1016/j.a.2020.1", "https://doi.org/10.3390/b1"])
+
+    mock_fetch.assert_called_once_with(["10.1016/j.a.2020.1", "10.3390/b1"])
+    routed = mock_router.call_args.args[0]
+    assert [(p.doi, p.publisher, p.year, p.abstract) for p in routed] == [
+        ("10.1016/j.a.2020.1", "elsevier", 2020, "Abs."),
+        ("10.3390/b1", "mdpi", 2021, None),
+    ]
+    assert pubs == routed
+    assert not (tmp_path / "doi_corpus" / "scopus.csv").exists()
+
+
+def test_download_dois_raises_when_nothing_resolves(tmp_path):
+    import pandas as pd
+    from biomarkit.pipeline import download_dois
+
+    load_corpus(tmp_path / "doi_corpus", build=True)
+    with patch("biomarkit.text_download.filter.crossref_metadata.fetch_crossref_metadata",
+               return_value=pd.DataFrame(columns=["Title", "Year", "DOI", "Publisher", "Abstract"])), \
+         patch("biomarkit.text_download.apis.router.ApiRouter") as mock_router:
+        with pytest.raises(ValueError, match="could be resolved by Crossref"):
+            download_dois(["10.1234/nothing"])
+    mock_router.assert_not_called()
+
+
+def test_download_corpus_still_requires_scopus_csv(tmp_path):
+    from biomarkit.pipeline import download_corpus
+
+    load_corpus(tmp_path / "doi_corpus", build=True)
+    with pytest.raises(FileNotFoundError, match="download_dois"):
+        download_corpus()

@@ -42,9 +42,10 @@ def resolve_corpus_path(corpus: "str | Path") -> Path:
     return (CORPORA_DIR / name).resolve()
 
 
-def build_corpus(corpus_dir: Path, scopus_file: "str | Path") -> Path:
+def build_corpus(corpus_dir: Path, scopus_file: "str | Path | None" = None) -> Path:
     """
-    Creates the folder structure for a corpus at corpus_dir and copies the Scopus CSV into it.
+    Creates the folder structure for a corpus at corpus_dir and copies the Scopus CSV into it, if one is given
+    (a corpus built from a DOI list with download_dois() has none).
 
     Safe to call on an existing corpus — existing contents (including an existing scopus.csv) are left untouched.
 
@@ -52,8 +53,8 @@ def build_corpus(corpus_dir: Path, scopus_file: "str | Path") -> Path:
     ----------
     corpus_dir : Path
         Folder to build the corpus in.
-    scopus_file : str | Path
-        Path to the Scopus export CSV to seed the corpus with.
+    scopus_file : str | Path | None
+        Path to the Scopus export CSV to seed the corpus with, or None.
 
     Returns
     -------
@@ -63,19 +64,20 @@ def build_corpus(corpus_dir: Path, scopus_file: "str | Path") -> Path:
     import shutil
     from biomarkit.config import CorpusPaths
 
-    scopus_src = Path(scopus_file)
-    if not scopus_src.exists():
+    scopus_src = Path(scopus_file) if scopus_file is not None else None
+    if scopus_src is not None and not scopus_src.exists():
         raise FileNotFoundError(f"Scopus CSV not found: {scopus_src}")
 
     paths = CorpusPaths(corpus_dir)
     for subdir in (paths.download_dir, paths.json_dir, paths.final_md_dir, paths.report_dir, paths.log_dir):
         subdir.mkdir(parents=True, exist_ok=True)
 
-    if not paths.scopus_csv.exists():
-        shutil.copy2(scopus_src, paths.scopus_csv)
-        logging.info(f"Copied Scopus CSV to {paths.scopus_csv}.")
-    else:
-        logging.warning(f"Scopus CSV already exists at {paths.scopus_csv} — leaving it untouched.")
+    if scopus_src is not None:
+        if not paths.scopus_csv.exists():
+            shutil.copy2(scopus_src, paths.scopus_csv)
+            logging.info(f"Copied Scopus CSV to {paths.scopus_csv}.")
+        else:
+            logging.warning(f"Scopus CSV already exists at {paths.scopus_csv} — leaving it untouched.")
 
     logging.info(f"Corpus ready at {corpus_dir}.")
     return corpus_dir
@@ -109,12 +111,6 @@ def setup_run():
     corpus.log_dir.mkdir(parents=True, exist_ok=True)
     corpus.report_dir.mkdir(parents=True, exist_ok=True)
     corpus.download_dir.mkdir(parents=True, exist_ok=True)
-
-    if not corpus.scopus_csv.exists():
-        raise FileNotFoundError(
-            f"No Scopus CSV found for corpus at {corpus.scopus_csv}. "
-            f"Place your Scopus export there before running the pipeline."
-        )
 
     if not corpus.db.exists():
         logging.info("SETUP - No cache file found. Making a new one.")
