@@ -33,7 +33,7 @@ def make_title(text: str, level: int = 1) -> TitleBlock:
 def make_cleaner(max_workers: int = 1, **ctx_overrides) -> Cleaner:
     context = dict(
         keep_figures=False, keep_tables=False, keep_latex=False,
-        keep_references=False, force_imrad_structure=False,
+        keep_references=False, normalise_imrad=False,
     )
     context.update(ctx_overrides)
     return Cleaner(publications=[], context=context, cache=None, max_workers=max_workers)
@@ -377,7 +377,7 @@ def _write_pub(tmp_path: Path) -> Publication:
 
 def test_clean_from_json_writes_markdown_file(tmp_path):
     pub = _write_pub(tmp_path)
-    cleaner = make_cleaner(force_imrad_structure=False)
+    cleaner = make_cleaner(normalise_imrad=False)
     markdown = cleaner.clean_from_json(pub)
     assert isinstance(markdown, str)
     assert len(markdown) > 0
@@ -387,7 +387,7 @@ def test_clean_from_json_writes_markdown_file(tmp_path):
 
 def test_clean_from_json_does_not_call_llm_when_imrad_disabled(tmp_path):
     pub = _write_pub(tmp_path)
-    cleaner = make_cleaner(force_imrad_structure=False)
+    cleaner = make_cleaner(normalise_imrad=False)
     with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier") as mock_llm:
         cleaner.clean_from_json(pub)
     mock_llm.assert_not_called()
@@ -400,7 +400,7 @@ def test_clean_all_calls_clean_from_json_for_each_pub(tmp_path):
     p2.mkdir()
     pub1 = _write_pub(p1)
     pub2 = _write_pub(p2)
-    cleaner = make_cleaner(force_imrad_structure=False)
+    cleaner = make_cleaner(normalise_imrad=False)
     cleaner.publications = [pub1, pub2]
     with patch.object(cleaner, "clean_from_json", return_value="md") as mock_clean:
         cleaner.clean_all()
@@ -416,7 +416,7 @@ def test_clean_all_parallel_processes_all_pubs(tmp_path):
     # Third publication fails: its JSON is missing. It must not stop the others.
     pubs[2].content_json_filepath.unlink()
 
-    cleaner = make_cleaner(max_workers=2, force_imrad_structure=False)
+    cleaner = make_cleaner(max_workers=2, normalise_imrad=False)
     cleaner.publications = pubs
     cleaner.clean_all()
 
@@ -452,7 +452,7 @@ def test_clean_from_json_updates_cache(tmp_path):
     conn.close()
 
     pub = _write_pub(tmp_path)
-    cleaner = make_cleaner(force_imrad_structure=False)
+    cleaner = make_cleaner(normalise_imrad=False)
     cleaner.cache = db
     cleaner.clean_from_json(pub)
 

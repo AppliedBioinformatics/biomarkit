@@ -295,7 +295,9 @@ Other changes in this release need no code change:
 - `standardise_text(max_workers=4)` and `transform_text(xml_workers=None)` process publications concurrently. Pass
   `1` for the old sequential behaviour. On Windows and macOS, call `transform_text()` under
   `if __name__ == "__main__":` because the XML workers are separate processes.
-- `standardise_text(force_imrad_structure=False)` no longer requires a reachable Ollama endpoint.
+- `standardise_text(normalise_imrad=False)` no longer requires a reachable Ollama endpoint.
+- **Code change:** `standardise_text(force_imrad_structure=...)` is renamed to `normalise_imrad=...`, since IMRAD
+  headings are not guaranteed. The old keyword raises a `TypeError`.
 - Download clients pause `rate_limit_delay` seconds between papers instead of using their HTTP timeout as the
   pause. Elsevier and the open-access/Unpaywall phase now start one paper per second (previously 10 s and 1 s),
   Springer 5 s (previously 10 s); all other clients keep their previous pause (Wiley, Taylor & Francis, APS,

@@ -39,7 +39,7 @@ def test_cleaner_produces_markdown_from_fixture(tmp_path, active_corpus):
                       publication_filepath=pdf, content_json_filepath=json_path)
 
     cleaner = Cleaner(publications=[], cache=None, context=dict(
-        keep_figures=True, keep_tables=True, keep_latex=True, keep_references=True, force_imrad_structure=False))
+        keep_figures=True, keep_tables=True, keep_latex=True, keep_references=True, normalise_imrad=False))
     markdown = cleaner.clean_from_json(pub)
 
     assert markdown.startswith("#")

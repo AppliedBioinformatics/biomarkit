@@ -296,7 +296,7 @@ def standardise_text(
     keep_tables: bool = False,
     keep_latex: bool = False,
     keep_references: bool = False,
-    force_imrad_structure: bool = True,
+    normalise_imrad: bool = True,
     max_workers: int = 4,
 ) -> list[Publication]:
     """
@@ -307,7 +307,7 @@ def standardise_text(
     structure via an Ollama LLM, and writes the result to the corpus results
     folder. Publications without a content_json_filepath are skipped.
 
-    Requires a running Ollama instance when force_imrad_structure=True. The
+    Requires a running Ollama instance when normalise_imrad=True. The
     function raises at the start if the endpoint is unreachable.
 
     Parameters
@@ -323,10 +323,11 @@ def standardise_text(
         When False, inline and block equations are replaced with a placeholder.
     keep_references : bool, default False
         When False, an attempt is made to remove the references section from the paper.
-    force_imrad_structure : bool, default True
-        When True, section headings are normalised to Introduction / Methods /
-        Results / Discussion using regex matching with an LLM fallback. Paper boilerplate sections are parsed to a
-        classifier to decide whether to remove each section.
+    normalise_imrad : bool, default True
+        When True, attempt to trim each paper to its core text (Introduction to the end of the Discussion) and
+        rename its section headings to Introduction / Methods / Results / Discussion, using regex matching with an
+        LLM fallback. Best effort: a section neither can find is logged and left as-is. When False, headings are
+        kept as extracted.
     max_workers : int, default 4
         Number of publications standardised concurrently. Mostly useful when the LLM fallback is in use, since
         Ollama can serve several requests at once. Set to 1 for strictly sequential processing.
@@ -343,12 +344,12 @@ def standardise_text(
     from biomarkit.standardisation.text_cleaning.cleaner import Cleaner
 
     # The LLM is only used for IMRAD restructuring, so only check the endpoint when that is on.
-    if force_imrad_structure and not prepare_standardisation():
+    if normalise_imrad and not prepare_standardisation():
         raise RuntimeError(
             "Ollama endpoint is not reachable or the configured model is not installed. "
-            "The LLM is required for force_imrad_structure=True to classify headings that "
+            "The LLM is required for normalise_imrad=True to classify headings that "
             "regex cannot match. Start Ollama and ensure the model is pulled, or set "
-            "force_imrad_structure=False to use regex-only heading detection."
+            "normalise_imrad=False to skip IMRAD normalisation."
         )
 
     logging.debug("Preflight checks passed. Proceeding with standardisation.")
@@ -362,7 +363,7 @@ def standardise_text(
                "keep_tables": keep_tables,
                "keep_latex": keep_latex,
                "keep_references": keep_references,
-               "force_imrad_structure": force_imrad_structure}
+               "normalise_imrad": normalise_imrad}
 
     # Instantiate the Cleaner class and clean the publications according to the params defined by the user.
     cleaner = Cleaner(

@@ -217,7 +217,7 @@ publications = biomarkit.standardise_text(publications,
                                           keep_tables=True, 
                                           keep_references=False, 
                                           keep_latex=False, 
-                                          force_imrad_structure=True)
+                                          normalise_imrad=True)
 ```
 
 Running the `standardise_text()` function will generate structured Markdown files for each manuscript. These outputs can
@@ -233,13 +233,13 @@ will be removed and replaced with a <latex_removed> tag.
 attempt to locate the references section heading (e.g. "References", "Bibliography") and remove it, along with all 
 content within that section. Content in any subsequent sections will be retained (acknowledgements, funding, etc).
 
-### Removing paper boilerplate with `force_imrad_structure` flag.
-`force_imrad_structure` - If set to True, the software will attempt to classify paper headings as "core" to the 
+### Removing paper boilerplate with `normalise_imrad` flag.
+`normalise_imrad` - If set to True, the software will attempt to classify paper headings as "core" to the 
 manuscript or "boilerplate" text that will be cut from the final version. This is done by passing manuscript text block 
 headers to a classifier model hosted locally by [Ollama](). Setting this flag attempts to remove all paper boilerplate,
-whilst retaining all core scientific text. It will also force all output Markdown files to contain the following 
-headers: `# Introduction`, `# Methods`, `# Results` and `# Discussion` (can be absent if no synonymous discussion block 
-is found).
+whilst retaining all core scientific text. It will also attempt to rename section headings to `# Introduction`,
+`# Methods`, `# Results` and `# Discussion`. This is best effort: a section that neither regex nor the classifier can
+identify is logged and left with its original heading.
 
 If [Ollama](https://ollama.com/) is not installed locally, but this parameter is set to True,
 the software will raise a runtime error. See [here](general.md#instructions-for-ollama-integration) for more information

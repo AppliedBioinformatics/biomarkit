@@ -37,8 +37,8 @@ Converts JSON-structured text into a standardised Markdown format. A single Mark
 document. Supports parameters for toggling inclusion of manuscript sections: figures, tables, references, and Latex 
 equations.
 
-The "force_imrad_structure" parameter will force each output Markdown file to contain marked sections for "Introduction"
-"Methods", "Results" and "Discussion" (can be omitted).
+The "normalise_imrad" parameter attempts to rename each output Markdown file's sections to "Introduction",
+"Methods", "Results" and "Discussion". This is best effort: a section that can't be identified is left as-is.
 
 ---
 
@@ -58,7 +58,7 @@ publications = biomarkit.download_corpus(check_opensource=True, generate_report=
 publications = biomarkit.transform_text(publications, mineru_tier="standard")
 
 # Build final markdown files:
-biomarkit.standardise_text(publications, keep_figures=False, keep_tables=True, keep_latex=True, force_imrad_structure=True)
+biomarkit.standardise_text(publications, keep_figures=False, keep_tables=True, keep_latex=True, normalise_imrad=True)
 ```
 
 ### Publications as Python objects:

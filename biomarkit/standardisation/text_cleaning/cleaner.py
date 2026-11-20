@@ -64,7 +64,7 @@ class Cleaner:
         self.keep_tables = context["keep_tables"]
         self.keep_latex = context["keep_latex"]
         self.keep_references = context["keep_references"]
-        self.force_imrad_structure = context["force_imrad_structure"]
+        self.normalise_imrad = context["normalise_imrad"]
 
     def _truncate_core_text(self, blocks):
         pass
@@ -367,7 +367,7 @@ class Cleaner:
         if not self.keep_latex:
             blocks = remove_latex(blocks)
 
-        if self.force_imrad_structure:
+        if self.normalise_imrad:
             blocks = self._build_imrad_structure(blocks)
 
         stem = Path(pub.publication_filepath).stem
@@ -408,7 +408,7 @@ class Cleaner:
         success, failed = 0, 0
 
         # Build the shared LLM client before the workers start so they don't race to create it.
-        if self.force_imrad_structure:
+        if self.normalise_imrad:
             _ = self._classifier
 
         with tqdm(total=total, desc="Standardising", unit="pub", leave=True, dynamic_ncols=True) as bar, \

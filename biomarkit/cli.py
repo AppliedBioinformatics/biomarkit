@@ -37,7 +37,7 @@ def main(argv=None):
     if not args.skip_standardise:
         standardise_text(publications, keep_figures=args.keep_figures, keep_tables=args.keep_tables,
                          keep_latex=args.keep_latex, keep_references=args.keep_references,
-                         force_imrad_structure=not args.no_imrad, max_workers=args.max_workers)
+                         normalise_imrad=not args.no_imrad, max_workers=args.max_workers)
 
 
 if __name__ == "__main__":

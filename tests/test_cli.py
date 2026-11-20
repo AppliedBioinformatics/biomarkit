@@ -19,7 +19,7 @@ def test_main_wires_flags_to_pipeline():
                                            generate_report=False, xml_workers=None)
     kwargs = mock_standardise.call_args.kwargs
     assert mock_standardise.call_args.args == (["converted"],)
-    assert kwargs["force_imrad_structure"] is False
+    assert kwargs["normalise_imrad"] is False
     assert kwargs["keep_tables"] is True
     assert kwargs["keep_figures"] is False
     assert kwargs["max_workers"] == 4

@@ -324,7 +324,7 @@ def test_standardise_text_skips_preflight_when_imrad_off():
     from biomarkit.pipeline import standardise_text
     with patch("biomarkit.standardisation.generics.prepare_standardisation") as mock_preflight, \
             patch("biomarkit.standardisation.text_cleaning.cleaner.Cleaner"):
-        standardise_text([], force_imrad_structure=False)
+        standardise_text([], normalise_imrad=False)
     mock_preflight.assert_not_called()
 
 
@@ -333,7 +333,7 @@ def test_standardise_text_raises_when_imrad_on_and_llm_unavailable():
     with patch("biomarkit.standardisation.generics.prepare_standardisation", return_value=False), \
             patch("biomarkit.standardisation.text_cleaning.cleaner.Cleaner"):
         with pytest.raises(RuntimeError):
-            standardise_text([], force_imrad_structure=True)
+            standardise_text([], normalise_imrad=True)
 
 
 def test_load_corpus_does_not_import_plotly_or_playwright(tmp_path):
