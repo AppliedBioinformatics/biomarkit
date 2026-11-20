@@ -14,10 +14,12 @@ class OpenSourceClient(PublisherApi):
     every publication before dispersing failures to publisher-specific API nodes.
 
     Routes are tried per DOI in this order, each only firing when its DOI pattern matches:
-        1. arXiv     - direct PDF URL built from the DOI (10.48550/arXiv.<id>).
-        2. bioRxiv   - direct content URL (DOI prefix 10.1101/, shared with medRxiv - both tried).
-        3. ChemRxiv  - Cambridge Open Engage public JSON API (DOI contains "chemrxiv").
-        4. Unpaywall - best open-access location lookup (https://unpaywall.org/products/api).
+        1. BioC-PMC  - BioC XML from the PMC Open Access / Author Manuscript sets, for DOIs that Europe PMC
+                       maps to a PMCID (https://www.ncbi.nlm.nih.gov/research/bionlp/APIs/BioC-PMC/).
+        2. arXiv     - direct PDF URL built from the DOI (10.48550/arXiv.<id>).
+        3. bioRxiv   - direct content URL (DOI prefix 10.1101/, shared with medRxiv - both tried).
+        4. ChemRxiv  - Cambridge Open Engage public JSON API (DOI contains "chemrxiv").
+        5. Unpaywall - best open-access location lookup (https://unpaywall.org/products/api).
 
     All routes are keyless. A failed route falls through to the next one. Download filenames are
     prefixed with the route that produced them (e.g. arxiv_1234567890.pdf) so files can be traced
@@ -29,6 +31,14 @@ class OpenSourceClient(PublisherApi):
     preprint_headers = {"User-Agent": "biomarkit/1.0"}
 
     chemrxiv_api_url = "https://www.cambridge.org/engage/coe/public-api/v1/items/doi"
+
+    # DOI -> PMCID lookup goes through Europe PMC search: NCBI's own ID converter (pmc.ncbi.nlm.nih.gov) answers 403
+    # to Python HTTP clients. Europe PMC is occasionally slow or returns 500, so a failed batch is retried once.
+    epmc_search_url = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
+    epmc_batch_size = 100
+    # NCBI answers 429 above ~2-3 requests/s.
+    bioc_api_url = "https://www.ncbi.nlm.nih.gov/research/bionlp/RESTful/pmcoa.cgi/BioC_xml"
+    bioc_retry_delay = 2.0
 
     # Papers attempted concurrently. New papers still start at most once per rate_limit_delay across all workers,
     # so Unpaywall sees no more than one lookup per second; the workers only overlap slow downloads.
@@ -44,6 +54,8 @@ class OpenSourceClient(PublisherApi):
         # Same bot-detection issue as SpringerClient: the browser-spoofing default_headers
         # cause publisher sites (BioMedCentral, Springer, etc.) to return HTML instead of PDFs.
         self.request_headers = {}
+        # DOI (lower-case) -> PMCID, filled once per run by download_all_papers().
+        self._pmcids = {}
 
     # ===Client specific methods - not overwritten from PublisherApi. ===
     @staticmethod
@@ -97,6 +109,78 @@ class OpenSourceClient(PublisherApi):
                                            headers=self.preprint_headers, timeout=self.preprint_timeout):
                 return filepath
         return None
+
+    def _search_epmc(self, query: str) -> list or None:
+        """Runs one Europe PMC search, retrying once. Returns the result records, or None if both attempts fail."""
+        params = {"query": query, "format": "json", "resultType": "lite", "pageSize": 1000}
+        for attempt in range(2):
+            try:
+                resp = requests.get(self.epmc_search_url, params=params,
+                                    timeout=self.preprint_timeout, headers=self.preprint_headers)
+                resp.raise_for_status()
+                return resp.json()["resultList"]["result"]
+
+            except (requests.exceptions.RequestException, ValueError, KeyError) as e:
+                self.logger.info(f"Europe PMC search failed (attempt {attempt + 1}) - {e}")
+        return None
+
+    def _lookup_pmcids(self, dois: list) -> dict:
+        """
+        Maps DOIs (lower-cased) to PMCIDs via Europe PMC, epmc_batch_size DOIs per OR query. DOIs not in PMC are left
+        out, and so are the DOIs of a batch whose search failed - they just miss the BioC route.
+        """
+        pmcids = {}
+        for i in range(0, len(dois), self.epmc_batch_size):
+            batch = dois[i:i + self.epmc_batch_size]
+            records = self._search_epmc(" OR ".join(f'DOI:"{doi}"' for doi in batch))
+
+            for record in records or []:
+                if record.get("pmcid") and record.get("doi"):
+                    pmcids[record["doi"].lower()] = record["pmcid"]
+
+        self.logger.info(f"Europe PMC matched {len(pmcids)}/{len(dois)} DOIs to a PMCID.")
+        return pmcids
+
+    def _get_bioc_xml(self, url: str) -> bytes or None:
+        """Fetches a BioC XML document, retrying once on 429. Returns the body, or None on failure."""
+        for attempt in range(2):
+            try:
+                resp = requests.get(url, timeout=self.preprint_timeout, headers=self.preprint_headers)
+                if resp.status_code == 429 and attempt == 0:
+                    time.sleep(self.bioc_retry_delay)
+                    continue
+                resp.raise_for_status()
+                return resp.content
+
+            except requests.exceptions.RequestException as e:
+                self.logger.info(f"Could not download BioC XML from url: {url} - {e}")
+                return None
+        return None
+
+    def _try_bioc(self, doi: str) -> Path or None:
+        """
+        BioC-PMC route. Only fires for DOIs the PMC ID converter mapped to a PMCID. Articles outside the PMC Open
+        Access / Author Manuscript sets come back as HTTP 200 with a plain-text "[Error]" body, so the body must
+        contain BioC passages to count as a download.
+        """
+        pmcid = self._pmcids.get(doi.lower())
+        if not pmcid:
+            return None
+
+        xml_url = f"{self.bioc_api_url}/{pmcid}/unicode"
+        self.logger.info(f"DOI {doi} matched the BioC-PMC route ({pmcid}). Trying {xml_url}.")
+
+        content = self._get_bioc_xml(xml_url)
+        if not content or not content.lstrip().startswith(b"<") or b"<passage>" not in content:
+            self.logger.info(f"No BioC XML available for DOI: {doi} ({pmcid}).")
+            return None
+
+        filepath = self._build_download_filepath(filetype="xml", source="bioc")
+        with open(filepath, "wb") as f:
+            f.write(content)
+
+        self.logger.info(f"Finished writing bytes to {filepath}.")
+        return filepath
 
     def _get_chemrxiv_item(self, doi: str) -> dict or None:
         """
@@ -238,6 +322,7 @@ class OpenSourceClient(PublisherApi):
         uncached paper and is pure HTTP, whereas the Playwright clients must stay on one thread.
         """
         total = len(self.publication_list)
+        self._pmcids = self._lookup_pmcids([p.doi for p in self.publication_list])
         self.logger.info(f"Attempting to download {total} papers from {self.name} with {self.max_workers} workers.")
 
         success, failed = 0, 0
@@ -255,11 +340,11 @@ class OpenSourceClient(PublisherApi):
 
     def download_paper(self, doi: str) -> Path or None:
         """
-        Downloads a single paper. Tries the direct preprint-server routes first
+        Downloads a single paper. Tries BioC-PMC XML first, then the direct preprint-server routes
         (arXiv -> bioRxiv -> ChemRxiv), then falls back to the Unpaywall API.
         """
 
-        for route in (self._try_arxiv, self._try_biorxiv, self._try_chemrxiv, self._try_unpaywall):
+        for route in (self._try_bioc, self._try_arxiv, self._try_biorxiv, self._try_chemrxiv, self._try_unpaywall):
             filepath = route(doi)
 
             if filepath:

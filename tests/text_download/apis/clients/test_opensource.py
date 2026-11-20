@@ -92,6 +92,94 @@ def test_download_paper_success(publications, caplog):
             assert result == fake_filepath
             assert f"Paper downloaded for DOI: {doi} at filepath: {fake_filepath}" in caplog.text
 
+# === BioC-PMC route ===
+def _epmc_response(records):
+    resp = MagicMock()
+    resp.json.return_value = {"resultList": {"result": records}}
+    return resp
+
+def test__lookup_pmcids_batches_and_lowercases(publications):
+    api = OpenSourceClient(publications)
+    api.epmc_batch_size = 2
+
+    with patch.object(api, "_search_epmc", side_effect=[
+        [{"doi": "10.1/a", "pmcid": "PMC1"}, {"doi": "10.1/b"}],
+        [{"doi": "10.1/C", "pmcid": "PMC3"}],
+    ]) as mock_search:
+        result = api._lookup_pmcids(["10.1/A", "10.1/B", "10.1/C"])
+
+    assert result == {"10.1/a": "PMC1", "10.1/c": "PMC3"}
+    assert mock_search.call_args_list == [call('DOI:"10.1/A" OR DOI:"10.1/B"'), call('DOI:"10.1/C"')]
+
+def test__lookup_pmcids_skips_failed_batch(publications):
+    api = OpenSourceClient(publications)
+    with patch.object(api, "_search_epmc", return_value=None):
+        assert api._lookup_pmcids(["10.1/a"]) == {}
+
+def test__search_epmc_retries_once(publications):
+    api = OpenSourceClient(publications)
+    records = [{"doi": "10.1/a", "pmcid": "PMC1"}]
+
+    with patch("biomarkit.text_download.apis.clients.opensource.requests.get",
+               side_effect=[RequestException("500"), _epmc_response(records)]) as mock_get:
+        assert api._search_epmc("q") == records
+    assert mock_get.call_count == 2
+
+    with patch("biomarkit.text_download.apis.clients.opensource.requests.get",
+               side_effect=RequestException("500")) as mock_get:
+        assert api._search_epmc("q") is None
+    assert mock_get.call_count == 2
+
+def test__try_bioc_no_pmcid_makes_no_request(publications):
+    api = OpenSourceClient(publications)
+    with patch("biomarkit.text_download.apis.clients.opensource.requests.get") as mock_get:
+        assert api._try_bioc("10.1234/testdoi") is None
+    mock_get.assert_not_called()
+
+def test__try_bioc_success(publications, tmp_path):
+    api = OpenSourceClient(publications)
+    api._pmcids = {"10.1234/testdoi": "PMC123"}
+    filepath = tmp_path / "bioc_1234567890.xml"
+    body = b'<?xml version="1.0"?><collection><document><passage><text>x</text></passage></document></collection>'
+
+    with patch.object(api, "_build_download_filepath", return_value=filepath) as mock_build, \
+            patch.object(api, "_get_bioc_xml", return_value=body) as mock_get:
+        assert api._try_bioc("10.1234/TestDOI") == filepath
+
+    mock_build.assert_called_once_with(filetype="xml", source="bioc")
+    assert mock_get.call_args.args[0].endswith("/BioC_xml/PMC123/unicode")
+    assert filepath.read_bytes() == body
+
+def test__try_bioc_error_body(publications, tmp_path):
+    api = OpenSourceClient(publications)
+    api._pmcids = {"10.1234/testdoi": "PMC123"}
+
+    # Not-found comes back as HTTP 200 with a plain-text error.
+    for body in (b"[Error] : No result can be found. <BR><HR>", b"<collection></collection>", None):
+        with patch.object(api, "_build_download_filepath", return_value=tmp_path / "bioc_x.xml"), \
+                patch.object(api, "_get_bioc_xml", return_value=body):
+            assert api._try_bioc("10.1234/testdoi") is None
+    assert not (tmp_path / "bioc_x.xml").exists()
+
+def test__get_bioc_xml_retries_on_429(publications):
+    api = OpenSourceClient(publications)
+    limited, ok = MagicMock(status_code=429), MagicMock(status_code=200, content=b"<collection/>")
+
+    with patch("biomarkit.text_download.apis.clients.opensource.requests.get", side_effect=[limited, ok]), \
+            patch("biomarkit.text_download.apis.clients.opensource.time.sleep") as mock_sleep:
+        assert api._get_bioc_xml("http://example.com") == b"<collection/>"
+    mock_sleep.assert_called_once_with(api.bioc_retry_delay)
+
+def test_download_all_papers_looks_up_pmcids_once(publications):
+    api = OpenSourceClient(publications)
+    with patch.object(api, "_lookup_pmcids", return_value={"10.1/a": "PMC1"}) as mock_lookup, \
+            patch.object(api, "download_paper", return_value=None), \
+            patch("biomarkit.text_download.apis.abc.publisher_api.time.sleep"):
+        api.download_all_papers()
+
+    mock_lookup.assert_called_once_with([p.doi for p in publications])
+    assert api._pmcids == {"10.1/a": "PMC1"}
+
 # === arXiv route ===
 def test__try_arxiv_no_match(publications):
     api = OpenSourceClient(publications)
@@ -236,12 +324,14 @@ def test_download_paper_route_order(publications):
     doi = "10.1234/testdoi"
     manager = MagicMock()
 
-    # No route succeeds - all four must be tried, in order.
-    with patch.object(api, "_try_arxiv", return_value=None) as mock_arxiv, \
+    # No route succeeds - all five must be tried, in order.
+    with patch.object(api, "_try_bioc", return_value=None) as mock_bioc, \
+            patch.object(api, "_try_arxiv", return_value=None) as mock_arxiv, \
             patch.object(api, "_try_biorxiv", return_value=None) as mock_biorxiv, \
             patch.object(api, "_try_chemrxiv", return_value=None) as mock_chemrxiv, \
             patch.object(api, "_try_unpaywall", return_value=None) as mock_unpaywall:
 
+        manager.attach_mock(mock_bioc, "bioc")
         manager.attach_mock(mock_arxiv, "arxiv")
         manager.attach_mock(mock_biorxiv, "biorxiv")
         manager.attach_mock(mock_chemrxiv, "chemrxiv")
@@ -250,7 +340,7 @@ def test_download_paper_route_order(publications):
         assert api.download_paper(doi) is None
 
     assert manager.mock_calls == [
-        call.arxiv(doi), call.biorxiv(doi), call.chemrxiv(doi), call.unpaywall(doi),
+        call.bioc(doi), call.arxiv(doi), call.biorxiv(doi), call.chemrxiv(doi), call.unpaywall(doi),
     ]
 
 def test_download_paper_short_circuits_on_first_success(publications):
@@ -258,7 +348,8 @@ def test_download_paper_short_circuits_on_first_success(publications):
     doi = "10.48550/arXiv.2207.03928"
     fake_filepath = Path("/fake/path/arxiv_1234567890.pdf")
 
-    with patch.object(api, "_try_arxiv", return_value=fake_filepath), \
+    with patch.object(api, "_try_bioc", return_value=None), \
+            patch.object(api, "_try_arxiv", return_value=fake_filepath), \
             patch.object(api, "_try_biorxiv") as mock_biorxiv, \
             patch.object(api, "_try_chemrxiv") as mock_chemrxiv, \
             patch.object(api, "_try_unpaywall") as mock_unpaywall:
@@ -284,6 +375,7 @@ def test_download_all_papers_success(publications, tmp_path):
 
     with patch.object(api, "download_paper", side_effect=lambda doi: paths[doi]) as mock_download, \
             patch.object(api, "_cache_successful_download") as mock_cache, \
+            patch.object(api, "_lookup_pmcids", return_value={}), \
             patch("biomarkit.text_download.apis.abc.publisher_api.time.sleep"):
 
         api.download_all_papers()
@@ -301,6 +393,7 @@ def test_download_papers_partial_failures(publications, tmp_path):
     with patch.object(api, "download_paper",
                       side_effect=lambda doi: None if doi == failing_doi else paths[doi]) as mock_download, \
             patch.object(api, "_cache_successful_download") as mock_cache, \
+            patch.object(api, "_lookup_pmcids", return_value={}), \
             patch("biomarkit.text_download.apis.abc.publisher_api.time.sleep"):
 
         api.download_all_papers()
@@ -318,6 +411,7 @@ def test_download_all_papers_uses_thread_pool(publications):
     with patch("biomarkit.text_download.apis.clients.opensource.ThreadPoolExecutor",
                wraps=ThreadPoolExecutor) as mock_pool, \
             patch.object(api, "download_paper", return_value=None), \
+            patch.object(api, "_lookup_pmcids", return_value={}), \
             patch("biomarkit.text_download.apis.abc.publisher_api.time.sleep"):
         api.download_all_papers()
 
@@ -334,7 +428,8 @@ def test_workers_start_papers_at_most_once_per_rate_limit_delay(publications):
         time.sleep(0.5)  # slow download, so several workers overlap
         return None
 
-    with patch.object(api, "download_paper", side_effect=fake_download):
+    with patch.object(api, "download_paper", side_effect=fake_download), \
+            patch.object(api, "_lookup_pmcids", return_value={}):
         api.download_all_papers()
 
     starts.sort()

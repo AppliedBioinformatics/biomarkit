@@ -362,3 +362,37 @@ def test_load_corpus_warns_and_skips_missing_cached_file(tmp_path, caplog):
 
     assert pubs[0].publication_filepath is None
     assert "not found on disk" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# transform_text routing
+# ---------------------------------------------------------------------------
+
+def test_transform_text_routes_bioc_and_elsevier_xmls(tmp_path):
+    from biomarkit.pipeline import transform_text
+    from biomarkit.text_download.basemodels.publication import Publication
+
+    def _pub(name, doi):
+        path = tmp_path / name
+        path.write_text("<x/>", encoding="utf-8")
+        return Publication(doi=doi, title="t", publisher="p", year=2020, document_type="XML", publication_filepath=path)
+
+    bioc, elsevier = _pub("bioc_1.xml", "10.1234/a"), _pub("elsevier_1.xml", "10.1234/b")
+
+    with patch("biomarkit.text_transformation.controller.controller.Controller.prepare_publications"), \
+         patch("biomarkit.text_transformation.controller.controller.Controller.__init__", return_value=None), \
+         patch("biomarkit.text_transformation.utils.generics.prepare_bulk_transformation"), \
+         patch("biomarkit.text_transformation.utils.generics.finalise_transformation", side_effect=lambda p: p), \
+         patch("biomarkit.text_transformation.converters.elsevier2json.ElsevierXmlTransformer") as mock_els, \
+         patch("biomarkit.text_transformation.converters.bioc2json.BioCXmlTransformer") as mock_bioc, \
+         patch("biomarkit.text_transformation.converters.mineru_pdf_to_md.MinerUPdfTransformer"):
+        from biomarkit.text_transformation.controller.controller import Controller
+        Controller.needs_transformation = [bioc, elsevier]
+        Controller.needs_processing, Controller.completed = [], []
+        try:
+            transform_text([bioc, elsevier], cleanup_intermediates=False)
+        finally:
+            del Controller.needs_transformation, Controller.needs_processing, Controller.completed
+
+    assert mock_bioc.call_args.kwargs["publication_list"] == [bioc]
+    assert mock_els.call_args.kwargs["publication_list"] == [elsevier]

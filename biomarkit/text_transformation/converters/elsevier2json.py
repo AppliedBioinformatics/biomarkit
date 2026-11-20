@@ -781,6 +781,8 @@ class ElsevierXmlTransformer(Transformer):
     Inherits iteration, caching, and error handling from Converter. With max_workers > 1, files are parsed in a
     process pool; results and cache writes are handled in the parent process.
     """
+    # Parses one file to JSON; subclasses for other XML formats swap this out.
+    _worker = staticmethod(_xml_to_json_file)
 
     def __init__(self, publication_list: List[Publication], max_workers: int | None = None):
         super().__init__(publication_list)
@@ -800,7 +802,7 @@ class ElsevierXmlTransformer(Transformer):
                 tqdm(total=total, initial=passed, desc=self.__class__.__name__, unit="pub",
                      leave=True, dynamic_ncols=True) as bar:
             futures = {
-                pool.submit(_xml_to_json_file, str(p.publication_filepath), str(self._build_output_path(p))): p
+                pool.submit(self._worker, str(p.publication_filepath), str(self._build_output_path(p))): p
                 for p in pending
             }
             for future in as_completed(futures):
@@ -830,8 +832,8 @@ class ElsevierXmlTransformer(Transformer):
         -------
         Path to the written JSON file, or None if conversion failed.
         """
-        output_path = Path(_xml_to_json_file(str(pub.publication_filepath), str(self._build_output_path(pub))))
-        logging.debug(f"Elsevier XML converted for {pub.doi} → {output_path}")
+        output_path = Path(self._worker(str(pub.publication_filepath), str(self._build_output_path(pub))))
+        logging.debug(f"{self.__class__.__name__} converted {pub.doi} → {output_path}")
         return output_path
 
 
