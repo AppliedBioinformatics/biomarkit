@@ -38,6 +38,9 @@ _RESULTS_AND_DISCUSSION_RE = re.compile(r'^results\s+(?:and|&)\s+discussion\b')
 _DISCUSSION_RE = re.compile(
     r'^(discussion|conclusions?\s+and\s+discussion|discussion\s+and\s+conclusions?)\b'
 )
+_CONCLUSION_RE = re.compile(r'^(conclusions?|concluding\s+remarks)\b')
+# Sentinel shown to the LLM so it can signal "no back-matter" without picking a real heading.
+_NO_END_DESCRIPTOR = "[end of document]"
 # Back-matter headings that mark the end of the core text. Ethics statements are deliberately excluded because
 # they are often a Methods subsection.
 _END_RE = re.compile(
@@ -111,6 +114,14 @@ class Cleaner:
     @staticmethod
     def _is_end_heading(block: TitleBlock) -> bool:
         return bool(_END_RE.match(Cleaner._normalise_heading(block)))
+
+    @staticmethod
+    def _is_core_section_heading(block: TitleBlock) -> bool:
+        heading = Cleaner._normalise_heading(block)
+        return any(
+            regex.match(heading)
+            for regex in (_INTRO_RE, _METHODS_RE, _RESULTS_RE, _DISCUSSION_RE, _CONCLUSION_RE)
+        )
 
     # --- Block insertion helpers (introduction only — other sections never insert) ---
 
@@ -247,13 +258,24 @@ class Cleaner:
             logging.debug("[Cleaner] Core text end found via regex at block index %d", end_regex_index)
             return self._insert_end_marker(blocks, end_regex_index)
 
+        blocks_context[len(blocks)] = _NO_END_DESCRIPTOR
         end_index = self._classifier.classify_end(blocks_context)
         if end_index is not None:
+            if end_index == len(blocks):
+                logging.debug("[Cleaner] find_core_text_end: LLM found no back-matter — keeping full block list")
+                return blocks
             if end_index <= min_end:
                 logging.warning(
                     "[Cleaner] find_core_text_end: LLM returned index %d which is before or at "
                     "Introduction (position %d) — ignoring and keeping full block list",
                     end_index, min_end,
+                )
+                return blocks
+            if self._is_core_section_heading(blocks[end_index]):
+                logging.warning(
+                    "[Cleaner] find_core_text_end: LLM returned core section heading %r at index %d "
+                    "— ignoring and keeping full block list",
+                    blocks[end_index].content.text, end_index,
                 )
                 return blocks
             logging.debug("[Cleaner] Core text end found via LLM at block index %d", end_index)

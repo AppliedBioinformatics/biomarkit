@@ -268,6 +268,17 @@ def test_image_path_resolved_with_images_dir():
     assert "auto/fig1.png" in result
 
 
+def test_image_without_path_renders_caption_only():
+    result = render([make_image(caption="Fig. 1: Legend", path="")], images_dir=Path("auto"))
+    assert result == "*Fig. 1: Legend*"
+
+
+def test_image_without_path_or_caption_skipped():
+    blocks = [ParagraphBlock(type="paragraph", content=ParagraphContent(paragraph_content=[TextSpan(type="text", content="Before")]), bbox=_BBOX),
+              make_image(path="")]
+    assert render(blocks) == "Before"
+
+
 # ---------------------------------------------------------------------------
 # Chart rendering
 # ---------------------------------------------------------------------------
@@ -302,3 +313,7 @@ def test_chart_footnote_rendered():
 def test_chart_path_resolved_with_images_dir():
     result = render([make_chart(path="chart1.png")], images_dir=Path("auto"))
     assert "auto/chart1.png" in result
+
+
+def test_chart_without_path_renders_caption_only():
+    assert render([make_chart(caption="Chart caption", path="")]) == "*Chart caption*"

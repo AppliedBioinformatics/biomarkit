@@ -14,6 +14,7 @@ from biomarkit.text_transformation.converters.elsevier2json import (
     _para_block,
     _title_block,
     _table_block,
+    _figure_block,
     _extract_formula,
     _enhance_text_formulas,
     parse_elsevier_xml_to_blocks,
@@ -333,6 +334,17 @@ def test_table_block_with_caption():
     assert any("A caption" in s["content"] for s in block["content"]["table_caption"])
 
 
+def test_table_block_joins_all_caption_paragraphs_with_label():
+    xml = (
+        f'<ce:table xmlns:ce="{CE}">'
+        f'<ce:label>Table 2</ce:label>'
+        f'<ce:caption><ce:simple-para>First part.</ce:simple-para><ce:simple-para>Second part.</ce:simple-para></ce:caption>'
+        f'</ce:table>'
+    )
+    caption = _table_block(ET.fromstring(xml))["content"]["table_caption"]
+    assert "".join(s["content"] for s in caption) == "Table 2: First part. Second part."
+
+
 def test_table_block_with_rows_generates_html():
     xml = (
         f'<ce:table xmlns:ce="{CE}">'
@@ -371,8 +383,69 @@ def test_table_block_without_footnotes_has_empty_footnote():
 
 
 # ---------------------------------------------------------------------------
+# _figure_block
+# ---------------------------------------------------------------------------
+
+def test_figure_block_returns_none_without_caption():
+    xml = f'<ce:figure xmlns:ce="{CE}"><ce:label>Fig. 1</ce:label><ce:link locator="gr1"/></ce:figure>'
+    assert _figure_block(ET.fromstring(xml)) is None
+
+
+def test_figure_block_joins_all_caption_paragraphs_with_label():
+    xml = (
+        f'<ce:figure xmlns:ce="{CE}">'
+        f'<ce:label>Fig. 1</ce:label>'
+        f'<ce:caption><ce:simple-para>First part.</ce:simple-para><ce:simple-para>Second part.</ce:simple-para></ce:caption>'
+        f'<ce:link locator="gr1"/>'
+        f'</ce:figure>'
+    )
+    block = _figure_block(ET.fromstring(xml))
+    assert block["type"] == "image"
+    assert block["content"]["image_source"] == {"path": ""}
+    assert "".join(s["content"] for s in block["content"]["image_caption"]) == "Fig. 1: First part. Second part."
+    assert block["content"]["image_footnote"] == []
+
+
+def test_figure_block_extracts_legend_as_footnote():
+    xml = (
+        f'<ce:figure xmlns:ce="{CE}">'
+        f'<ce:caption><ce:simple-para>Cap</ce:simple-para></ce:caption>'
+        f'<ce:legend><ce:simple-para>Scale bar, 10 µm.</ce:simple-para></ce:legend>'
+        f'</ce:figure>'
+    )
+    footnote = _figure_block(ET.fromstring(xml))["content"]["image_footnote"]
+    assert "".join(s["content"] for s in footnote) == "Scale bar, 10 µm."
+
+
+# ---------------------------------------------------------------------------
 # parse_elsevier_xml_to_blocks
 # ---------------------------------------------------------------------------
+
+def test_parse_elsevier_xml_to_blocks_includes_figures(tmp_path):
+    xml = (
+        f'<?xml version="1.0"?>'
+        f'<full-text-retrieval-response xmlns="{DEFAULT_NS}">'
+        f'<ja:article xmlns:ja="{JA}">'
+        f'<ja:head xmlns:ja="{JA}"><ce:title xmlns:ce="{CE}">T</ce:title></ja:head>'
+        f'<ja:body xmlns:ja="{JA}">'
+        f'<ce:sections xmlns:ce="{CE}">'
+        f'<ce:section><ce:section-title>Results</ce:section-title>'
+        f'<ce:figure><ce:caption><ce:simple-para>Inline legend.</ce:simple-para></ce:caption></ce:figure>'
+        f'</ce:section>'
+        f'</ce:sections>'
+        f'</ja:body>'
+        f'<ce:floats xmlns:ce="{CE}">'
+        f'<ce:figure><ce:caption><ce:simple-para>Float legend.</ce:simple-para></ce:caption></ce:figure>'
+        f'</ce:floats>'
+        f'</ja:article>'
+        f'</full-text-retrieval-response>'
+    )
+    xml_path = tmp_path / "figs.xml"
+    xml_path.write_text(xml, encoding="utf-8")
+    images = [b for b in parse_elsevier_xml_to_blocks(str(xml_path))[0] if b["type"] == "image"]
+    captions = ["".join(s["content"] for s in b["content"]["image_caption"]) for b in images]
+    assert captions == ["Inline legend.", "Float legend."]
+
 
 def test_parse_elsevier_xml_to_blocks_returns_single_page(tmp_path):
     xml_path = tmp_path / "article.xml"

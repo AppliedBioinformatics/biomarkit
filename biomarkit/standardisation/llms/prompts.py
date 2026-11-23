@@ -22,7 +22,8 @@ top-level section heading.
 will therefore almost always be one of the highest-numbered indices in the list.
 - IMPORTANT: The input you receive has already had standard boilerplate sections (acknowledgments, \
 funding, author details) stripped. If you cannot identify a clear back-matter heading, return the \
-highest block index in the input — this signals that all remaining content is core scientific text.
+key whose descriptor is "[end of document]" — this signals that all content is core scientific text. \
+Never return the last heading just because it is last.
 - Never return an index that comes before the introduction or methods section.
 - Sometimes the methods section is the last section of the paper; in these cases the non-scientific \
 boilerplate will begin after the end of this section.

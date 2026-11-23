@@ -66,7 +66,8 @@ def _render_image(block: ImageBlock, images_dir: Path | None) -> str:
     caption = _render_spans(block.content.image_caption)
     raw = block.content.image_source.path if block.content.image_source else ""
     path = _resolve_image_path(raw, images_dir)
-    parts = [f"![{caption}]({path})"]
+    # XML figures have no image file, so only the caption is rendered.
+    parts = [f"![{caption}]({path})"] if path else []
     if caption:
         parts.append(f"*{caption}*")
     footnote = _render_spans(block.content.image_footnote)
@@ -79,7 +80,7 @@ def _render_chart(block: ChartBlock, images_dir: Path | None) -> str:
     caption = _render_spans(block.content.chart_caption)
     raw = block.content.image_source.path if block.content.image_source else ""
     path = _resolve_image_path(raw, images_dir)
-    parts = [f"![{caption}]({path})"]
+    parts = [f"![{caption}]({path})"] if path else []
     if caption:
         parts.append(f"*{caption}*")
     footnote = _render_spans(block.content.chart_footnote)
@@ -128,9 +129,13 @@ def render(blocks: list[ContentBlock], images_dir: Path | None = None) -> str:
             if text:
                 parts.append(text)
         elif isinstance(block, ImageBlock):
-            parts.append(_render_image(block, images_dir))
+            text = _render_image(block, images_dir)
+            if text:
+                parts.append(text)
         elif isinstance(block, ChartBlock):
-            parts.append(_render_chart(block, images_dir))
+            text = _render_chart(block, images_dir)
+            if text:
+                parts.append(text)
         elif isinstance(block, ListBlock):
             parts.append(_render_list(block))
 

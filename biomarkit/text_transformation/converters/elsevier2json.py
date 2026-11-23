@@ -629,14 +629,11 @@ def _table_block(table: ET.Element) -> dict | None:
     label = clean_text(label_elem.text) if label_elem is not None and label_elem.text else ""
 
     caption_spans = []
-    caption = _find(table, "ce:caption")
-    if caption is not None:
-        for para in caption.iter(_ns("ce:simple-para")):
-            caption_text = clean_text(get_element_text(para))
-            if caption_text:
-                prefix = f"{label}: " if label else ""
-                caption_spans = _spans(prefix + caption_text)
-                break
+    caption_text = " ".join(t for t in (clean_text(get_element_text(p))
+                                        for p in _findall(table, "ce:caption/ce:simple-para")) if t)
+    if caption_text:
+        prefix = f"{label}: " if label else ""
+        caption_spans = _spans(prefix + caption_text)
 
     html = None
     for child in table.iter():
@@ -678,6 +675,38 @@ def _table_block(table: ET.Element) -> dict | None:
     }
 
 
+def _figure_block(figure: ET.Element) -> dict | None:
+    """Convert a ce:figure element to an ImageBlock dict. No image files exist for XML publications, so the source
+    path is left empty; the caption (all paragraphs) and legend are kept."""
+    label_elem = _find(figure, "ce:label")
+    label = clean_text(label_elem.text) if label_elem is not None and label_elem.text else ""
+
+    caption_text = " ".join(t for t in (clean_text(get_element_text(p))
+                                        for p in _findall(figure, "ce:caption/ce:simple-para")) if t)
+    if not caption_text:
+        return None
+    prefix = f"{label}: " if label else ""
+
+    footnotes = []
+    for fn in _findall(figure, "ce:figure-footnote"):
+        fn_label = clean_text(get_element_text(_find(fn, "ce:label")))
+        fn_text = " ".join(clean_text(get_element_text(p)) for p in _findall(fn, "ce:note-para"))
+        footnotes.append(f"{fn_label} {fn_text}".strip())
+    for para in _findall(figure, "ce:legend/ce:simple-para"):
+        footnotes.append(clean_text(get_element_text(para)))
+    footnote_text = " ".join(f for f in footnotes if f)
+
+    return {
+        "type": "image",
+        "content": {
+            "image_source": {"path": ""},
+            "image_caption": _spans(prefix + caption_text),
+            "image_footnote": _spans(footnote_text) if footnote_text else [],
+        },
+        "bbox": [0, 0, 0, 0],
+    }
+
+
 def _section_to_blocks(section: ET.Element, level: int = 2) -> list:
     """Recursively convert a ce:section into a list of block dicts."""
     blocks = []
@@ -701,7 +730,10 @@ def _section_to_blocks(section: ET.Element, level: int = 2) -> list:
             tb = _table_block(child)
             if tb:
                 blocks.append(tb)
-        # figures skipped — no image files exist for XML publications
+        elif local == "figure":
+            fb = _figure_block(child)
+            if fb:
+                blocks.append(fb)
     return blocks
 
 
@@ -742,7 +774,7 @@ def parse_elsevier_xml_to_blocks(xml_path: str) -> list:
                 blocks.extend(_section_to_blocks(child, level=2))
         break  # only first ce:sections block
 
-    # Tables from ce:floats that were not inline in a section
+    # Tables and figures from ce:floats that were not inline in a section
     for float_block in root.iter(_ns("ce:floats")):
         for child in float_block:
             local = _local(child.tag)
@@ -750,6 +782,10 @@ def parse_elsevier_xml_to_blocks(xml_path: str) -> list:
                 tb = _table_block(child)
                 if tb:
                     blocks.append(tb)
+            elif local == "figure":
+                fb = _figure_block(child)
+                if fb:
+                    blocks.append(fb)
 
     refs = extract_references(root)
     if refs:

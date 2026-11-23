@@ -647,3 +647,43 @@ def test_find_core_text_end_full_pipeline_empty_output_prevented():
     trimmed = cleaner._trim_to_core_text(result)
     assert len(trimmed) > 0
     assert trimmed[0].content.title_content[0].content == "Introduction"
+
+def _imrad_blocks_without_back_matter():
+    return [
+        make_title("Introduction"),  # 0
+        make_paragraph("i"),         # 1
+        make_title("Methods"),       # 2
+        make_paragraph("m"),         # 3
+        make_title("Results"),       # 4
+        make_paragraph("r"),         # 5
+        make_title("Conclusions"),   # 6
+        make_paragraph("c1"),        # 7
+        make_paragraph("c2"),        # 8
+    ]
+
+
+def test_find_core_text_end_offers_no_end_sentinel_to_llm():
+    cleaner = make_cleaner()
+    blocks = _imrad_blocks_without_back_matter()
+    mock_instance = MagicMock()
+    mock_instance.classify_end.return_value = len(blocks)
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
+        result = cleaner._find_core_text_end(blocks)
+    context = mock_instance.classify_end.call_args[0][0]
+    assert context[len(blocks)] == "[end of document]"
+    assert cleaner._trim_to_core_text(result) == blocks
+
+
+@pytest.mark.parametrize("last_heading", ["Conclusions", "Discussion", "5. Results", "Methods"])
+def test_find_core_text_end_llm_picking_core_section_keeps_final_section(last_heading):
+    # Regression: the LLM picking the final (scientific) heading used to truncate that whole section.
+    cleaner = make_cleaner()
+    blocks = _imrad_blocks_without_back_matter()
+    blocks[6] = make_title(last_heading)
+    mock_instance = MagicMock()
+    mock_instance.classify_end.return_value = 6
+    with patch("biomarkit.standardisation.text_cleaning.cleaner.LlamaClassifier", return_value=mock_instance):
+        result = cleaner._find_core_text_end(blocks)
+    trimmed = cleaner._trim_to_core_text(result)
+    assert len(trimmed) == 9
+    assert trimmed[-1].content.paragraph_content[0].content == "c2"
