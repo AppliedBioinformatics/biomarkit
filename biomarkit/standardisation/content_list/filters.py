@@ -24,8 +24,11 @@ def _placeholder(text: str) -> ParagraphBlock:
     )
 
 # REGEX patterns to identify reference/bibliography content blocks.
+# Allows an optional section number ("7.", "7", "VII.") and trailing punctuation ("References:").
 _REFERENCES_RE = re.compile(
-    r"^[\s\W]*(references|bibliography|works cited|literature cited)\s*$",
+    r"^[\s\W]*(?:(?:\d+|[ivxlc]+)(?:[.):]\s*|\s+))?"
+    r"(references?(?:\s+(?:and\s+notes|cited|list))?|bibliography|works\s+cited|literature\s+cited|cited\s+literature)"
+    r"[\s\W]*$",
     re.IGNORECASE,
 )
 

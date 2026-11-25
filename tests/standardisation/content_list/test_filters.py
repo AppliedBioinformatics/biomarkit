@@ -272,6 +272,24 @@ def test_remove_references_no_references_section_unchanged():
     blocks = [make_paragraph("body"), make_title("Discussion", level=1)]
     assert remove_references(blocks) == blocks
 
+
+@pytest.mark.parametrize("heading", [
+    "7. References", "7 References", "VII. References", "References:", "  References.", "## References",
+    "Reference", "References and Notes", "References Cited", "Reference list", "Cited literature",
+    "Literature Cited", "Works Cited",
+])
+def test_remove_references_heading_variants_matched(heading):
+    blocks = [make_paragraph("body"), make_title(heading, level=1), make_paragraph("citation")]
+    assert len(remove_references(blocks)) == 1
+
+
+@pytest.mark.parametrize("heading", [
+    "Reference genome assembly", "References to prior work in the Introduction", "Cross-references", "Preferences",
+])
+def test_remove_references_non_reference_headings_kept(heading):
+    blocks = [make_paragraph("body"), make_title(heading, level=1), make_paragraph("text")]
+    assert remove_references(blocks) == blocks
+
 # ---------------------------------------------------------------------------
 # Removed blocks leave only the placeholder in rendered output
 # ---------------------------------------------------------------------------
