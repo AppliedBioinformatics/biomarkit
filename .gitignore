@@ -16,7 +16,10 @@ tmp/
 llm_response.txt
 text_download/apis/clients/am_phyto_soc.py
 text_download/apis/clients/copernicus.py
-evals/
+evals/**
+!evals/**/
+!evals/parser_benchmark/*.py
+!evals/fullpaper_benchmark/*.py
 download_results.xlsx
 biomarkit_manuscript.docx
 cover_letter_bioinformatics.docx
