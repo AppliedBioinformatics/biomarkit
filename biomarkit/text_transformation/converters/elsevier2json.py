@@ -96,6 +96,15 @@ def clean_text(text: str) -> str:
 
 _SELF_PARSED_TAGS = frozenset({"float-anchor", "display", "math", "formula"})
 
+# Display formulas are carried through clean_text() between private-use sentinels (not control characters, which
+# re's \s treats as whitespace) and split out of paragraphs by _para_blocks(); elsewhere they become inline maths.
+_DISPLAY_OPEN, _DISPLAY_CLOSE = "", ""
+_DISPLAY_RE = re.compile(f"{_DISPLAY_OPEN}(.*?){_DISPLAY_CLOSE}", re.S)
+
+
+def _display_as_inline(text: str) -> str:
+    return _DISPLAY_RE.sub(lambda m: f"${m[1].strip()}$", text)
+
 
 def get_element_text(elem: ET.Element) -> str:
     """Recursively extract and format text from an element, handling inline markup."""
@@ -137,7 +146,8 @@ def get_element_text(elem: ET.Element) -> str:
         elif child_local == "display":
             formula_text = _extract_formula(child)
             if formula_text:
-                parts.append(f"\n\n{formula_text}\n\n")
+                latex = formula_text.removeprefix("$$").removesuffix("$$").strip()
+                parts.append(f" {_DISPLAY_OPEN}{latex}{_DISPLAY_CLOSE} ")
         elif child_local == "math":
             latex_content = _parse_mathml(child)
             # Add inline math delimiters for math elements within text
@@ -455,7 +465,7 @@ def _parse_cals_row(row: ET.Element) -> List[str]:
     for child in row:
         child_local = _local(child.tag)
         if child_local == "entry":
-            cells.append(clean_text(get_element_text(child)))
+            cells.append(_display_as_inline(clean_text(get_element_text(child))))
     return cells
 
 
@@ -604,7 +614,7 @@ def _format_structured_reference(sb_ref: ET.Element) -> str:
 
 def _spans(text: str) -> list:
     """Split text containing $...$ inline math into TextSpan / InlineEquation dicts."""
-    parts = re.split(r'(\$[^$]+\$)', text)
+    parts = re.split(r'(\$[^$]+\$)', _display_as_inline(text))
     result = []
     for p in parts:
         if not p:
@@ -618,6 +628,19 @@ def _spans(text: str) -> list:
 
 def _para_block(text: str) -> dict:
     return {"type": "paragraph", "content": {"paragraph_content": _spans(text)}, "bbox": [0, 0, 0, 0]}
+
+
+def _para_blocks(text: str) -> list[dict]:
+    """Paragraph text with any display formulas split out as equation_interline blocks."""
+    blocks = []
+    for i, piece in enumerate(_DISPLAY_RE.split(text)):
+        if i % 2:  # captured formula
+            if piece.strip():
+                blocks.append({"type": "equation_interline", "bbox": [0, 0, 0, 0],
+                               "content": {"math_content": piece.strip(), "math_type": "latex"}})
+        elif piece.strip():
+            blocks.append(_para_block(piece.strip()))
+    return blocks
 
 
 def _title_block(text: str, level: int) -> dict:
@@ -730,7 +753,7 @@ def _section_to_blocks(section: ET.Element, level: int = 2) -> list:
         if local in ("para", "simple-para"):
             text = clean_text(get_element_text(child))
             if text:
-                blocks.append(_para_block(text))
+                blocks.extend(_para_blocks(text))
         elif local == "section":
             blocks.extend(_section_to_blocks(child, level=level + 1))
         elif local == "table":
@@ -772,7 +795,7 @@ def parse_elsevier_xml_to_blocks(xml_path: str) -> list:
         blocks.append(_title_block("Abstract", level=2))
         for para in abstract.split("\n\n"):
             if para.strip():
-                blocks.append(_para_block(para.strip()))
+                blocks.extend(_para_blocks(para.strip()))
 
     for elem in root.iter(_ns("ce:sections")):
         for child in elem:

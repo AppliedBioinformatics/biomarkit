@@ -37,15 +37,16 @@ def _replace_inline_latex(spans: list[InlineContent]) -> list[InlineContent]:
     placeholder = TextSpan(type="text", content="<latex_removed>")
     return [placeholder if isinstance(s, InlineEquation) else s for s in spans]
 
-def remove_latex(blocks: list[ContentBlock]) -> list[ContentBlock]:
-    """Replace block equations with a <latex_removed> placeholder paragraph.
-    Replace inline equations inside paragraphs, titles, lists and algorithms with a <latex_removed> text span.
-    """
+def remove_display_latex(blocks: list[ContentBlock]) -> list[ContentBlock]:
+    """Replace display (block) equations with a <latex_removed> placeholder paragraph."""
+    return [_placeholder("<latex_removed>") if isinstance(b, EquationInterlineBlock) else b for b in blocks]
+
+
+def remove_inline_latex(blocks: list[ContentBlock]) -> list[ContentBlock]:
+    """Replace inline equations inside paragraphs, titles, lists and algorithms with a <latex_removed> text span."""
     result = []
     for block in blocks:
-        if isinstance(block, EquationInterlineBlock):
-            result.append(_placeholder("<latex_removed>"))  # block-level
-        elif isinstance(block, ParagraphBlock):
+        if isinstance(block, ParagraphBlock):
             new_spans = _replace_inline_latex(block.content.paragraph_content)
             result.append(ParagraphBlock(type="paragraph", content=ParagraphContent(paragraph_content=new_spans), bbox=block.bbox))
         elif isinstance(block, TitleBlock):

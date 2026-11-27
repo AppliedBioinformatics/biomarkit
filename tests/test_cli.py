@@ -23,6 +23,8 @@ def test_main_wires_flags_to_pipeline():
     assert kwargs["keep_tables"] is True
     assert kwargs["keep_figures"] is False
     assert kwargs["keep_boilerplate"] is True
+    assert kwargs["keep_inline_latex"] is True
+    assert kwargs["keep_display_latex"] is False
     assert kwargs["max_workers"] == 4
 
 
@@ -60,3 +62,15 @@ def test_main_rejects_scopus_and_dois_file_together():
     import pytest
     with pytest.raises(SystemExit):
         main(["corpus_dir", "--scopus-file", "s.csv", "--dois-file", "dois.txt"])
+
+
+def test_main_latex_flags():
+    with patch("biomarkit.cli.setup_logging"), \
+            patch("biomarkit.cli.load_corpus", return_value=["pub"]), \
+            patch("biomarkit.cli.transform_text", return_value=["converted"]), \
+            patch("biomarkit.cli.standardise_text") as mock_standardise:
+        main(["my_corpus", "--skip-download", "--no-imrad", "--no-inline-latex", "--keep-display-latex"])
+
+    kwargs = mock_standardise.call_args.kwargs
+    assert kwargs["keep_inline_latex"] is False
+    assert kwargs["keep_display_latex"] is True

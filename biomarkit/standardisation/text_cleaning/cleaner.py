@@ -15,7 +15,8 @@ from biomarkit.standardisation.content_list.schema import (
 from biomarkit.standardisation.content_list.filters import (
     remove_boilerplate,
     remove_figures,
-    remove_latex,
+    remove_display_latex,
+    remove_inline_latex,
     remove_references,
     remove_tables,
 )
@@ -65,7 +66,8 @@ class Cleaner:
         self._llm: Optional[LlamaClassifier] = None
         self.keep_figures = context["keep_figures"]
         self.keep_tables = context["keep_tables"]
-        self.keep_latex = context["keep_latex"]
+        self.keep_inline_latex = context["keep_inline_latex"]
+        self.keep_display_latex = context["keep_display_latex"]
         self.keep_references = context["keep_references"]
         self.keep_boilerplate = context["keep_boilerplate"]
         self.normalise_imrad = context["normalise_imrad"]
@@ -388,8 +390,10 @@ class Cleaner:
             blocks = remove_figures(blocks)
         if not self.keep_tables:
             blocks = remove_tables(blocks)
-        if not self.keep_latex:
-            blocks = remove_latex(blocks)
+        if not self.keep_display_latex:
+            blocks = remove_display_latex(blocks)
+        if not self.keep_inline_latex:
+            blocks = remove_inline_latex(blocks)
 
         if self.normalise_imrad:
             blocks = self._build_imrad_structure(blocks)

@@ -461,3 +461,9 @@ def test_download_corpus_still_requires_scopus_csv(tmp_path):
     load_corpus(tmp_path / "doi_corpus", build=True)
     with pytest.raises(FileNotFoundError, match="download_dois"):
         download_corpus()
+
+
+def test_standardise_text_rejects_removed_keep_latex():
+    from biomarkit.pipeline import standardise_text
+    with pytest.raises(TypeError):
+        standardise_text([], keep_latex=True, normalise_imrad=False)

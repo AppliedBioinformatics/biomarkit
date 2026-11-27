@@ -35,6 +35,7 @@ Search the project (excluding virtual environments) for these patterns. Every hi
 | `biomarkit.main` | 5 |
 | `SCOPUS_INPUT_CSV_NAME`, `DB_CACHE_FILE_NAME`, `DOWNLOAD_DIR`, `JSON_STRUCT_DIR`, `FINAL_MARKDOWN_DIR`, `REPORT_DIR`, `LOG_DIR`, `CORPUS_DIR` | 5 |
 | `create_corpus`, `check_vllm_config`, `MinerUPdfTransformer(` | 5 |
+| `keep_latex`, `--keep-latex` | 8 |
 
 ---
 
@@ -329,6 +330,21 @@ under the corpus `intermediates/` folder and their Markdown files under `results
 headers, footers, page numbers, page footnotes and margin text, as before, so no code change is needed. For PMC BioC
 XML it now also removes footnotes and published peer-review history, which earlier versions kept as paragraphs;
 regenerate BioC JSON with the steps above to apply this to an existing corpus.
+
+**Code change:** `standardise_text(keep_latex=...)` is replaced by two options, so inline and display equations can
+be handled separately. The old keyword raises a `TypeError`.
+
+```diff
+- standardise_text(publications, keep_latex=True)
++ standardise_text(publications, keep_inline_latex=True, keep_display_latex=True)
+- standardise_text(publications, keep_latex=False)
++ standardise_text(publications, keep_inline_latex=False, keep_display_latex=False)
+```
+
+The defaults are now `keep_inline_latex=True` and `keep_display_latex=False`, so inline LaTeX (often units, symbols or
+statistics) is kept unless removed explicitly. On the CLI, `--keep-latex` is replaced by `--keep-display-latex` and
+`--no-inline-latex`. Elsevier XML conversion now writes display equations as separate equation blocks (they were
+previously merged into the surrounding paragraph as inline maths); regenerate Elsevier JSON with the steps above.
 
 ---
 

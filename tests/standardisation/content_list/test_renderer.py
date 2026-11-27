@@ -334,3 +334,33 @@ def test_empty_page_block_renders_nothing():
     from biomarkit.standardisation.content_list.schema import _parse_block
     block = _parse_block({"type": "page_number", "bbox": [0, 0, 0, 0], "content": {"page_number_content": []}})
     assert render([block, make_paragraph("body")]) == "body"
+
+
+def _block(raw: dict):
+    from biomarkit.standardisation.content_list.schema import _parse_block
+    block = _parse_block({"bbox": [0, 0, 0, 0], **raw})
+    assert not isinstance(block, MiscBlock)
+    return block
+
+
+def test_code_block_renders_fenced_with_caption():
+    block = _block({"type": "code", "content": {
+        "code_caption": [{"type": "text", "content": "Listing 1"}],
+        "code_content": [{"type": "text", "content": "library(DESeq2)\nres <- results(dds)"}],
+        "code_footnote": [], "code_language": "r"}})
+    assert render([block]) == "**Listing 1**\n\n```r\nlibrary(DESeq2)\nres <- results(dds)\n```"
+
+
+def test_algorithm_block_renders_fenced_with_inline_maths():
+    block = _block({"type": "algorithm", "content": {
+        "algorithm_caption": [],
+        "algorithm_content": [{"type": "text", "content": "Algorithm 1: Sampler\nfor "},
+                              {"type": "equation_inline", "content": "m = 1 : M"}, {"type": "text", "content": " do"}],
+        "algorithm_footnote": []}})
+    assert render([block]) == "```\nAlgorithm 1: Sampler\nfor $m = 1 : M$ do\n```"
+
+
+def test_index_block_renders_as_list():
+    block = _block({"type": "index", "content": {"list_type": "text_list", "list_items": [
+        {"item_type": "text", "item_content": [{"type": "text", "content": "1 Introduction"}]}]}})
+    assert render([block]) == "- 1 Introduction"

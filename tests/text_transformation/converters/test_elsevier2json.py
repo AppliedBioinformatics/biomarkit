@@ -547,6 +547,28 @@ def test_extract_formula_empty_returns_empty():
     assert _extract_formula(ET.fromstring(f'<ce:formula xmlns:ce="{CE}"/>')) == ""
 
 
+def test_display_formula_in_para_becomes_equation_block():
+    from biomarkit.text_transformation.converters.elsevier2json import _section_to_blocks
+    section = ET.fromstring(
+        f'<ce:section xmlns:ce="{CE}"><ce:para>The formula is as follows: '
+        f'<ce:display><ce:formula>x = 1</ce:formula></ce:display> Where x is the cost of $5.</ce:para></ce:section>'
+    )
+    blocks = _section_to_blocks(section)
+
+    assert [b["type"] for b in blocks] == ["paragraph", "equation_interline", "paragraph"]
+    assert blocks[1]["content"]["math_content"] == "x = 1"
+    assert blocks[0]["content"]["paragraph_content"] == [{"type": "text", "content": "The formula is as follows:"}]
+    assert blocks[2]["content"]["paragraph_content"][0]["content"].startswith("Where x")
+
+
+def test_display_formula_outside_paragraph_becomes_inline_maths():
+    from biomarkit.text_transformation.converters.elsevier2json import _parse_cals_row
+    row = ET.fromstring(f'<row xmlns:ce="{CE}"><entry><ce:display><ce:formula>y = 2</ce:formula></ce:display></entry></row>')
+    assert _parse_cals_row(row) == ["$y = 2$"]
+    spans = _spans(f"Caption {chr(0xE000)}z = 3{chr(0xE001)} end")
+    assert [s["type"] for s in spans] == ["text", "equation_inline", "text"]
+
+
 # ---------------------------------------------------------------------------
 # ElsevierXmlTransformer.transform_all (serial and process pool)
 # ---------------------------------------------------------------------------

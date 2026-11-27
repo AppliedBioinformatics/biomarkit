@@ -216,7 +216,7 @@ publications = biomarkit.standardise_text(publications,
                                           keep_figures=False, 
                                           keep_tables=True, 
                                           keep_references=False, 
-                                          keep_latex=False, 
+                                          keep_display_latex=False, 
                                           normalise_imrad=True)
 ```
 
@@ -227,11 +227,16 @@ be customised to your needs using the set parameters:
 be removed and replaced with a <figure_removed> tag.
 * `keep_tables` - If True, tables will be rendered within the final Markdown file. If false, table blocks will be
 removed and replaced with a <table_removed> tag.
-* `keep_latex` - If True, LaTeX equations will be rendered within the final Markdown file. If false, LaTeX equations
-will be removed and replaced with a <latex_removed> tag.
-* `keep_references` - If True, references will be rendered within the final Markdown file. If False, the software will
-attempt to locate the references section heading (e.g. "References", "Bibliography") and remove it, along with all 
-content within that section. Content in any subsequent sections will be retained (acknowledgements, funding, etc).
+* `keep_display_latex` - If True, display (standalone) equations will be rendered within the final Markdown file. If
+False (default), each is replaced with a <latex_removed> tag.
+* `keep_inline_latex` - If True (default), inline LaTeX within sentences, headings, lists and algorithms is kept. If
+False, each inline equation is replaced with a <latex_removed> tag. Inline LaTeX often carries units, symbols or
+statistics, so it is kept by default.
+* `keep_references` - If True, references will be rendered within the final Markdown file. If False (default), each
+reference list is replaced with a <references_removed> tag. The "References" heading and all other text are kept.
+* `keep_boilerplate` - If True, page headers, footers, page numbers, page footnotes, margin text and tables of contents
+are rendered as plain text (for PMC BioC XML: footnotes and published peer-review history). If False (default), they
+are removed.
 
 ### Removing paper boilerplate with `normalise_imrad` flag.
 `normalise_imrad` - If set to True, the software will attempt to classify paper headings as "core" to the 

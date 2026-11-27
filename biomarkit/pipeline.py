@@ -357,7 +357,8 @@ def standardise_text(
     publications: list[Publication],
     keep_figures: bool = False,
     keep_tables: bool = False,
-    keep_latex: bool = False,
+    keep_inline_latex: bool = True,
+    keep_display_latex: bool = False,
     keep_references: bool = False,
     keep_boilerplate: bool = False,
     normalise_imrad: bool = True,
@@ -383,13 +384,17 @@ def standardise_text(
         When False, image and chart blocks are replaced with a placeholder.
     keep_tables : bool, default False
         When False, table blocks are replaced with a placeholder.
-    keep_latex : bool, default False
-        When False, inline and block equations are replaced with a placeholder.
+    keep_inline_latex : bool, default True
+        When False, inline equations (LaTeX spans inside sentences, headings, lists and algorithms) are replaced
+        with a placeholder. Kept by default because inline LaTeX often carries units, symbols or statistics.
+    keep_display_latex : bool, default False
+        When False, display (standalone) equations are replaced with a placeholder.
     keep_references : bool, default False
         When False, reference lists are replaced with a placeholder. Text outside the reference list is never removed.
     keep_boilerplate : bool, default False
-        When False, page headers, footers, page numbers, page footnotes, margin text and tables of contents are removed. For PMC BioC XML,
-        footnotes and published peer-review history are removed; Elsevier XML contains none of these.
+        When False, page headers, footers, page numbers, page footnotes, margin text and tables of contents are
+        removed. For PMC BioC XML, footnotes and published peer-review history are removed; Elsevier XML contains
+        none of these.
     normalise_imrad : bool, default True
         When True, attempt to trim each paper to its core text (Introduction to the end of the Discussion) and
         rename its section headings to Introduction / Methods / Results / Discussion, using regex matching with an
@@ -428,7 +433,8 @@ def standardise_text(
     # Build the custom instructions for the Cleaner class.
     context = {"keep_figures": keep_figures,
                "keep_tables": keep_tables,
-               "keep_latex": keep_latex,
+               "keep_inline_latex": keep_inline_latex,
+               "keep_display_latex": keep_display_latex,
                "keep_references": keep_references,
                "keep_boilerplate": keep_boilerplate,
                "normalise_imrad": normalise_imrad}

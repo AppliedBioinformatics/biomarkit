@@ -17,7 +17,8 @@ from biomarkit.standardisation.content_list.schema import (
 from biomarkit.standardisation.content_list.filters import (
     remove_boilerplate,
     remove_figures,
-    remove_latex,
+    remove_display_latex,
+    remove_inline_latex,
     remove_references,
     remove_tables,
 )
@@ -119,18 +120,18 @@ def test_remove_boilerplate_leaves_content_blocks():
 
 
 # ---------------------------------------------------------------------------
-# remove_latex
+# remove_display_latex / remove_inline_latex
 # ---------------------------------------------------------------------------
 
-def test_remove_latex_replaces_block_equation():
+def test_remove_display_latex_replaces_block_equation():
     blocks = [make_equation_block()]
-    result = remove_latex(blocks)
+    result = remove_display_latex(blocks)
     assert len(result) == 1
     assert result[0].type == "paragraph"
     assert result[0].content.paragraph_content[0].content == "<latex_removed>"
 
 
-def test_remove_latex_replaces_inline_equation_in_paragraph():
+def test_remove_inline_latex_replaces_inline_equation_in_paragraph():
     para = ParagraphBlock(
         type="paragraph",
         content=ParagraphContent(paragraph_content=[
@@ -140,13 +141,13 @@ def test_remove_latex_replaces_inline_equation_in_paragraph():
         ]),
         bbox=_BBOX,
     )
-    result = remove_latex([para])
+    result = remove_inline_latex([para])
     spans = result[0].content.paragraph_content
     assert all(isinstance(s, TextSpan) for s in spans)
     assert spans[1].content == "<latex_removed>"
 
 
-def test_remove_latex_replaces_inline_equation_in_title():
+def test_remove_inline_latex_replaces_inline_equation_in_title():
     title = TitleBlock(
         type="title",
         content=TitleContent(
@@ -155,24 +156,25 @@ def test_remove_latex_replaces_inline_equation_in_title():
         ),
         bbox=_BBOX,
     )
-    result = remove_latex([title])
+    result = remove_inline_latex([title])
     assert result[0].content.title_content[1].content == "<latex_removed>"
 
 
-def test_remove_latex_replaces_inline_equation_in_list():
+def test_remove_inline_latex_replaces_inline_equation_in_list():
     item = ListItem(item_type="text", item_content=[make_inline_equation()])
     block = ListBlock(
         type="list",
         content=ListContent(list_type="items", attribute="unordered", list_items=[item]),
         bbox=_BBOX,
     )
-    result = remove_latex([block])
+    result = remove_inline_latex([block])
     assert result[0].content.list_items[0].item_content[0].content == "<latex_removed>"
 
 
-def test_remove_latex_passes_through_other_blocks():
+@pytest.mark.parametrize("remove", [remove_display_latex, remove_inline_latex])
+def test_remove_latex_passes_through_other_blocks(remove):
     blocks = [make_paragraph("plain"), make_title("heading"), make_table_block()]
-    result = remove_latex(blocks)
+    result = remove(blocks)
     assert result[0].content.paragraph_content[0].content == "plain"
     assert result[1].content.title_content[0].content == "heading"
 
@@ -281,4 +283,34 @@ def test_remove_figures_drops_footnote_from_render():
 
 def test_remove_latex_display_equation_renders_placeholder():
     from biomarkit.standardisation.content_list.renderer import render
-    assert render(remove_latex([make_equation_block()])) == "<latex_removed>"
+    assert render(remove_display_latex([make_equation_block()])) == "<latex_removed>"
+
+
+def test_remove_boilerplate_drops_index_keeps_code_and_algorithm():
+    from biomarkit.standardisation.content_list.schema import _parse_block
+    index = _parse_block({"type": "index", "bbox": [0, 0, 0, 0], "content": {"list_type": "text_list", "list_items": []}})
+    code = _parse_block({"type": "code", "bbox": [0, 0, 0, 0], "content": {"code_content": []}})
+    algo = _parse_block({"type": "algorithm", "bbox": [0, 0, 0, 0], "content": {"algorithm_content": []}})
+    assert remove_boilerplate([index, code, algo]) == [code, algo]
+
+
+def test_remove_latex_replaces_inline_equation_in_algorithm():
+    from biomarkit.standardisation.content_list.schema import _parse_block
+    algo = _parse_block({"type": "algorithm", "bbox": [0, 0, 0, 0], "content": {"algorithm_content": [
+        {"type": "text", "content": "for "}, {"type": "equation_inline", "content": "m = 1"}]}})
+    spans = remove_inline_latex([algo])[0].content.algorithm_content
+    assert [s.content for s in spans] == ["for ", "<latex_removed>"]
+
+
+def test_display_and_inline_latex_are_removed_independently():
+    para = ParagraphBlock(type="paragraph", bbox=_BBOX, content=ParagraphContent(paragraph_content=[
+        TextSpan(type="text", content="Let "), make_inline_equation()]))
+    blocks = [para, make_equation_block()]
+
+    display_removed = remove_display_latex(blocks)
+    assert display_removed[0] is para
+    assert display_removed[1].content.paragraph_content[0].content == "<latex_removed>"
+
+    inline_removed = remove_inline_latex(blocks)
+    assert inline_removed[0].content.paragraph_content[1].content == "<latex_removed>"
+    assert inline_removed[1] is blocks[1]

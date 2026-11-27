@@ -34,8 +34,8 @@ including raw texts and figures.
 
 ### Convert all manuscripts to a customisable Markdown format with `standardise_text()`.
 Converts JSON-structured text into a standardised Markdown format. A single Markdown file is generated for each
-document. Supports parameters for toggling inclusion of manuscript sections: figures, tables, references, Latex 
-equations, and page boilerplate (`keep_boilerplate`: page headers, footers, page numbers, page footnotes, margin
+document. Supports parameters for toggling inclusion of manuscript sections: figures, tables, references, inline
+LaTeX (`keep_inline_latex`, kept by default), display equations (`keep_display_latex`), and page boilerplate (`keep_boilerplate`: page headers, footers, page numbers, page footnotes, margin
 text, plus footnotes and peer-review history in PMC BioC XML; removed by default).
 
 The "normalise_imrad" parameter attempts to rename each output Markdown file's sections to "Introduction",
@@ -59,7 +59,7 @@ publications = biomarkit.download_corpus(check_opensource=True, generate_report=
 publications = biomarkit.transform_text(publications, mineru_tier="standard")
 
 # Build final markdown files:
-biomarkit.standardise_text(publications, keep_figures=False, keep_tables=True, keep_latex=True, normalise_imrad=True)
+biomarkit.standardise_text(publications, keep_figures=False, keep_tables=True, keep_display_latex=True, normalise_imrad=True)
 ```
 
 ### Publications as Python objects:
