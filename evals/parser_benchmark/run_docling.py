@@ -15,8 +15,7 @@
 # torchvision = [{ index = "pytorch-cu128" }]
 # ///
 """
-Docling 2.151.1 standard pipeline (layout + OCR + TableFormer, with formula enrichment so equations come out as LaTeX
-rather than images) on the OmniDocBench academic pages.
+Docling 2.151.1 standard pipeline (EasyOCR, TableFormer, formula enrichment) on the OmniDocBench pages.
 
     uv run evals/parser_benchmark/run_docling.py --mode standard
 """

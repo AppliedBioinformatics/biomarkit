@@ -3,12 +3,9 @@
 # dependencies = []
 # ///
 """
-Score prediction folders with OmniDocBench's official end-to-end scorer (run in .venv-omnidocbench).
+Score prediction folders with OmniDocBench's end-to-end scorer (all and English pages) into results/scores/.
 
     uv run evals/parser_benchmark/score.py preds/accuracy/mineru_standard_cuda [more folders...]
-
-Each folder is scored twice: all academic pages and English only. Results are copied to
-results/scores/<folder>/<all|english>/. Formulas are scored by edit distance (CDM needs Linux + TeX Live).
 """
 import argparse
 import json

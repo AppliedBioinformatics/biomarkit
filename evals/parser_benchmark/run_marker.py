@@ -15,13 +15,9 @@
 # torchvision = [{ index = "pytorch-cu128" }]
 # ///
 """
-Marker 2.2.0 on the OmniDocBench academic pages. LLM-assist (use_llm) is off.
+Marker 2.2.0 (LLM-assist off) on the OmniDocBench pages; VLM modes need llama-server in vendor/llama.cpp/.
 
     uv run evals/parser_benchmark/run_marker.py --mode balanced
-
-Modes: fast (in-process Indra ONNX OCR, no VLM), balanced (Surya VLM for tables/math/scans), accurate (Surya VLM on
-every page). The VLM modes need llama.cpp's llama-server: Surya's default on NVIDIA is a vLLM Docker container, which
-isn't available on Windows. Download a llama.cpp Windows CUDA release into vendor/llama.cpp/ (see README).
 """
 import os
 import subprocess

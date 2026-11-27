@@ -3,12 +3,9 @@
 # dependencies = ["pandas", "numpy", "tabulate"]
 # ///
 """
-Collect scorer outputs and timings into the manuscript tables.
+Collect scores and timings into results/summary_*.{csv,md} (Supplementary Table 6).
 
     uv run evals/parser_benchmark/summarise.py
-
-Writes results/summary_accuracy_{all,english}.{csv,md} and results/summary_speed.{csv,md}.
-Overall = mean of (1 - text ED), table TEDS and (1 - formula ED), x100 (OmniDocBench's own Overall uses formula CDM).
 """
 import json
 from pathlib import Path

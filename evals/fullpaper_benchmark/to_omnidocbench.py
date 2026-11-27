@@ -3,14 +3,9 @@
 # dependencies = ["pandas"]
 # ///
 """
-Convert the selected full-paper GT to OmniDocBench's end-to-end format (one pseudo-page per paper) so it can be scored
-with parser_benchmark/score.py. Only core text (INTRO/METHODS/RESULTS/DISCUSS/CONCL headings and paragraphs) and tables
-are scored; all other GT text is given categories OmniDocBench matches but ignores, so the predicted abstract,
-references, captions etc. are absorbed rather than penalised.
+Convert the selected GT to OmniDocBench format (one pseudo-page per paper) for table scoring with score.py.
 
     uv run evals/fullpaper_benchmark/to_omnidocbench.py
-
-Writes gt/omnidocbench.json and parser_benchmark/data/fullpaper.txt (selected PDF paths for the run_*.py scripts).
 """
 import json
 from pathlib import Path

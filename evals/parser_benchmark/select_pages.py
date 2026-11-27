@@ -3,11 +3,9 @@
 # dependencies = []
 # ///
 """
-Pick OmniDocBench's academic-literature pages, download their images, and write the page lists.
+Select OmniDocBench's academic-literature pages and download their images to data/.
 
     uv run evals/parser_benchmark/select_pages.py
-
-Writes to data/: OmniDocBench_academic.json (GT for the scorer), pages_academic.txt (all academic pages) and images/.
 """
 import json
 import urllib.parse

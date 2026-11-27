@@ -15,11 +15,9 @@
 # torchvision = [{ index = "pytorch-cu128" }]
 # ///
 """
-MinerU 4.0.12 (the version biomarkit ships) on the OmniDocBench academic pages.
+MinerU 4.0.12 (the version biomarkit ships) on the OmniDocBench pages.
 
     uv run evals/parser_benchmark/run_mineru.py --mode standard
-
-Modes are MinerU's tiers (biomarkit exposes basic/standard/advanced; flash is MinerU's fastest).
 """
 import os
 import sys

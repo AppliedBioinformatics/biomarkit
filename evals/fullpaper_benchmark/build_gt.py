@@ -3,15 +3,9 @@
 # dependencies = ["pandas", "pymupdf"]
 # ///
 """
-Build the full-paper ground truth (GT) from PMC BioC XML and check each XML/PDF pair.
+Build the full-paper GT from BioC XML, apply the structure and PDF version checks, and select the papers.
 
     uv run evals/fullpaper_benchmark/build_gt.py
-
-Each BioC passage keeps NCBI's section_type; core text = INTRO/METHODS/RESULTS/DISCUSS/CONCL headings and paragraphs.
-Figures and tables are single units (caption + footnote, plus HTML for tables).
-A paper is excluded if it lacks INTRO plus one of METHODS/RESULTS/DISCUSS or has < MIN_CORE_PARAGRAPHS core paragraphs,
-or if < MIN_VERSION_MATCH of its core paragraphs are found in the PDF text layer (author manuscript vs version of record).
-The first TARGET passing papers per publisher are selected. Writes gt/<id>.json, gt/<id>.md and updates manifest.csv.
 """
 import json
 import re

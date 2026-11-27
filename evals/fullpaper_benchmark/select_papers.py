@@ -3,13 +3,9 @@
 # dependencies = ["pandas"]
 # ///
 """
-Sample candidate papers for the full-paper benchmark from BioC XMLs already downloaded into the corpora.
+Sample full-paper benchmark candidates per publisher, round-robin across journals, from BioC XMLs in the corpora.
 
     uv run evals/fullpaper_benchmark/select_papers.py
-
-Candidates per publisher are drawn round-robin across journals (journal code taken from the DOI suffix) with a fixed
-seed, so each journal contributes one paper before any contributes a second. The 100 DOIs of the original annotation set (evals/eval2doi.py) are excluded.
-Writes manifest.csv and copies each BioC XML to gt/raw/<id>.xml.
 """
 import ast
 import random
