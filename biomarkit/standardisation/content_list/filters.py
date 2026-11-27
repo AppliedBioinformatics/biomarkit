@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 from biomarkit.standardisation.content_list.schema import (
+    AlgorithmBlock,
     ChartBlock,
     ContentBlock,
     EquationInterlineBlock,
@@ -22,11 +23,11 @@ def _placeholder(text: str) -> ParagraphBlock:
         bbox=(0, 0, 0, 0),
     )
 
-_BOILERPLATE_TYPES = {"page_header", "page_footer", "page_number", "page_footnote", "page_aside_text"}
+_BOILERPLATE_TYPES = {"page_header", "page_footer", "page_number", "page_footnote", "page_aside_text", "index"}
 
 
 def remove_boilerplate(blocks: list[ContentBlock]) -> list[ContentBlock]:
-    """Drop page headers, footers, page numbers, page footnotes and margin (aside) text."""
+    """Drop page headers, footers, page numbers, page footnotes, margin (aside) text and tables of contents."""
     return [b for b in blocks if b.type not in _BOILERPLATE_TYPES]
 
 
@@ -38,7 +39,7 @@ def _replace_inline_latex(spans: list[InlineContent]) -> list[InlineContent]:
 
 def remove_latex(blocks: list[ContentBlock]) -> list[ContentBlock]:
     """Replace block equations with a <latex_removed> placeholder paragraph.
-    Replace inline equations inside paragraphs, titles, and lists with a <latex_removed> text span.
+    Replace inline equations inside paragraphs, titles, lists and algorithms with a <latex_removed> text span.
     """
     result = []
     for block in blocks:
@@ -50,6 +51,12 @@ def remove_latex(blocks: list[ContentBlock]) -> list[ContentBlock]:
         elif isinstance(block, TitleBlock):
             new_spans = _replace_inline_latex(block.content.title_content)
             result.append(TitleBlock(type="title", content=block.content.model_copy(update={"title_content": new_spans}), bbox=block.bbox))
+        elif isinstance(block, AlgorithmBlock):
+            c = block.content
+            result.append(block.model_copy(update={"content": c.model_copy(update={
+                "algorithm_caption": _replace_inline_latex(c.algorithm_caption),
+                "algorithm_content": _replace_inline_latex(c.algorithm_content),
+                "algorithm_footnote": _replace_inline_latex(c.algorithm_footnote)})}))
         elif isinstance(block, ListBlock):
             new_items = []
             for item in block.content.list_items:

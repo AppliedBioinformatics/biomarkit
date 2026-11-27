@@ -35,7 +35,7 @@ including raw texts and figures.
 ### Convert all manuscripts to a customisable Markdown format with `standardise_text()`.
 Converts JSON-structured text into a standardised Markdown format. A single Markdown file is generated for each
 document. Supports parameters for toggling inclusion of manuscript sections: figures, tables, references, Latex 
-equations, and page boilerplate (`keep_boilerplate`: page headers, footers, page numbers, page footnotes and margin
+equations, and page boilerplate (`keep_boilerplate`: page headers, footers, page numbers, page footnotes, margin
 text, plus footnotes and peer-review history in PMC BioC XML; removed by default).
 
 The "normalise_imrad" parameter attempts to rename each output Markdown file's sections to "Introduction",

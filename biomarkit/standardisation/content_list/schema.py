@@ -108,6 +108,19 @@ class PageAsideTextContent(BaseModel):
     page_aside_text_content: list[InlineContent]
 
 
+class CodeContent(BaseModel):
+    code_caption: list[InlineContent] = Field(default_factory=list)
+    code_content: list[InlineContent] = Field(default_factory=list)
+    code_footnote: list[InlineContent] = Field(default_factory=list)
+    code_language: str = "txt"
+
+
+class AlgorithmContent(BaseModel):
+    algorithm_caption: list[InlineContent] = Field(default_factory=list)
+    algorithm_content: list[InlineContent] = Field(default_factory=list)
+    algorithm_footnote: list[InlineContent] = Field(default_factory=list)
+
+
 
 # Top-level block models
 class ParagraphBlock(BaseModel):
@@ -182,6 +195,25 @@ class PageAsideTextBlock(BaseModel):
     bbox: tuple[float, float, float, float]
 
 
+class CodeBlock(BaseModel):
+    type: Literal["code"]
+    content: CodeContent
+    bbox: tuple[float, float, float, float]
+
+
+class AlgorithmBlock(BaseModel):
+    type: Literal["algorithm"]
+    content: AlgorithmContent
+    bbox: tuple[float, float, float, float]
+
+
+class IndexBlock(BaseModel):
+    """Table of contents; MinerU writes it with the same content shape as a list."""
+    type: Literal["index"]
+    content: ListContent
+    bbox: tuple[float, float, float, float]
+
+
 class MiscBlock(BaseModel):
     """Catch-all for any block type not explicitly modelled."""
     type: str
@@ -205,6 +237,9 @@ _KNOWN_BLOCK_TYPES = Annotated[
         PageFootnoteBlock,
         PageNumberBlock,
         PageAsideTextBlock,
+        CodeBlock,
+        AlgorithmBlock,
+        IndexBlock,
     ],
     Field(discriminator="type"),
 ]
@@ -214,7 +249,7 @@ ContentBlock = Union[_KNOWN_BLOCK_TYPES, MiscBlock]
 _KNOWN_TYPES = frozenset({
     "paragraph", "title", "image", "table", "chart", "list",
     "equation_interline", "page_header", "page_footer",
-    "page_footnote", "page_number", "page_aside_text",
+    "page_footnote", "page_number", "page_aside_text", "code", "algorithm", "index",
 })
 
 # Built once: constructing a TypeAdapter compiles its validation schema, which is expensive to repeat per block.

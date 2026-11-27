@@ -388,7 +388,7 @@ def standardise_text(
     keep_references : bool, default False
         When False, reference lists are replaced with a placeholder. Text outside the reference list is never removed.
     keep_boilerplate : bool, default False
-        When False, page headers, footers, page numbers, page footnotes and margin text are removed. For PMC BioC XML,
+        When False, page headers, footers, page numbers, page footnotes, margin text and tables of contents are removed. For PMC BioC XML,
         footnotes and published peer-review history are removed; Elsevier XML contains none of these.
     normalise_imrad : bool, default True
         When True, attempt to trim each paper to its core text (Introduction to the end of the Discussion) and

@@ -3,10 +3,13 @@
 from pathlib import Path
 
 from biomarkit.standardisation.content_list.schema import (
+    AlgorithmBlock,
     ChartBlock,
+    CodeBlock,
     ContentBlock,
     EquationInterlineBlock,
     ImageBlock,
+    IndexBlock,
     InlineEquation,
     ListBlock,
     PageAsideTextBlock,
@@ -97,7 +100,28 @@ def _render_chart(block: ChartBlock, images_dir: Path | None) -> str:
     return "\n\n".join(parts)
 
 
-def _render_list(block: ListBlock) -> str:
+def _render_fenced(caption, body: str, footnote, language: str = "") -> str:
+    parts = []
+    if caption := _render_spans(caption):
+        parts.append(f"**{caption}**")
+    if body.strip():
+        parts.append(f"```{language}\n{body.strip(chr(10))}\n```")
+    if (footnote := _render_spans(footnote)).strip():
+        parts.append(footnote)
+    return "\n\n".join(parts)
+
+
+def _render_code(block: CodeBlock) -> str:
+    c = block.content
+    return _render_fenced(c.code_caption, _render_spans(c.code_content), c.code_footnote, c.code_language)
+
+
+def _render_algorithm(block: AlgorithmBlock) -> str:
+    c = block.content
+    return _render_fenced(c.algorithm_caption, _render_spans(c.algorithm_content), c.algorithm_footnote)
+
+
+def _render_list(block: ListBlock | IndexBlock) -> str:
     lines = []
     ordered = block.content.attribute == "ordered"
     for i, item in enumerate(block.content.list_items, start=1):
@@ -144,8 +168,14 @@ def render(blocks: list[ContentBlock], images_dir: Path | None = None) -> str:
             text = _render_chart(block, images_dir)
             if text:
                 parts.append(text)
-        elif isinstance(block, ListBlock):
+        elif isinstance(block, (ListBlock, IndexBlock)):
             parts.append(_render_list(block))
+        elif isinstance(block, CodeBlock):
+            if text := _render_code(block):
+                parts.append(text)
+        elif isinstance(block, AlgorithmBlock):
+            if text := _render_algorithm(block):
+                parts.append(text)
         elif isinstance(block, _PAGE_BLOCKS):
             text = _render_spans(getattr(block.content, f"{block.type}_content"))
             if text.strip():
