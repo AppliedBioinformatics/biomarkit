@@ -317,3 +317,20 @@ def test_chart_path_resolved_with_images_dir():
 
 def test_chart_without_path_renders_caption_only():
     assert render([make_chart(caption="Chart caption", path="")]) == "*Chart caption*"
+
+
+@pytest.mark.parametrize("block_type", [
+    "page_header", "page_footer", "page_footnote", "page_number", "page_aside_text",
+])
+def test_page_blocks_render_as_text_when_kept(block_type):
+    from biomarkit.standardisation.content_list.schema import _parse_block
+    block = _parse_block({"type": block_type, "bbox": [0, 0, 0, 0],
+                          "content": {f"{block_type}_content": [{"type": "text", "content": "Journal X 2020"}]}})
+    assert not isinstance(block, MiscBlock)
+    assert render([block]) == "Journal X 2020"
+
+
+def test_empty_page_block_renders_nothing():
+    from biomarkit.standardisation.content_list.schema import _parse_block
+    block = _parse_block({"type": "page_number", "bbox": [0, 0, 0, 0], "content": {"page_number_content": []}})
+    assert render([block, make_paragraph("body")]) == "body"

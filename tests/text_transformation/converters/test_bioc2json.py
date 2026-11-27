@@ -8,7 +8,10 @@ from biomarkit.text_transformation.converters.bioc2json import (
     parse_bioc_xml_to_blocks,
 )
 from biomarkit.standardisation.content_list.schema import Document
-from biomarkit.standardisation.content_list.filters import remove_figures, remove_references, remove_tables
+from biomarkit.standardisation.content_list.filters import (
+    remove_boilerplate, remove_figures, remove_references, remove_tables,
+)
+from biomarkit.standardisation.content_list.renderer import render
 
 
 def _passage(ptype, section, text="", **infons):
@@ -40,6 +43,7 @@ _BIOC = (
     + _passage("fig_caption", "FIG", "Figure caption.", id="F1", file="f1.jpg")
     + _passage("title", "ABBR", "Abbreviations")
     + _passage("footnote", "ABBR", "BWT: Burrows-Wheeler transform")
+    + _passage("paragraph", "REVIEW_INFO", "Reviewer 1: please clarify Figure 2.")
     + _passage("title", "REF", "REFERENCES")
     + _passage("ref", "REF", "A paper title.", name_0="surname:Smith;given-names:John A",
                name_1="surname:Doe;given-names:Jane", source="Bioinformatics", year="2009",
@@ -78,7 +82,8 @@ def test_parse_bioc_block_order_and_levels(tmp_path):
         ("table", None, None),
         ("image", None, None),
         ("title", 2, "Abbreviations"),
-        ("paragraph", None, "BWT: Burrows-Wheeler transform"),
+        ("page_footnote", None, None),
+        ("page_aside_text", None, None),
         ("title", 2, "References"),
         ("list", None, None),
     ]
@@ -143,3 +148,15 @@ def test_bioc_transformer_writes_content_list(tmp_path, active_corpus):
     assert pub.content_json_filepath.name == "bioc_0000000001_content_list_v2.json"
     pages = json.loads(pub.content_json_filepath.read_text(encoding="utf-8"))
     assert pages[0][0]["content"]["title_content"][0]["content"] == "A study of things"
+
+
+def test_parse_bioc_footnotes_and_review_are_boilerplate(tmp_path):
+    out = tmp_path / "out.json"
+    out.write_text(json.dumps(parse_bioc_xml_to_blocks(str(_write(tmp_path)))), encoding="utf-8")
+    blocks = Document.from_file(out).blocks()
+
+    kept, removed = render(blocks), render(remove_boilerplate(blocks))
+    for text in ("BWT: Burrows-Wheeler transform", "Reviewer 1: please clarify Figure 2."):
+        assert text in kept
+        assert text not in removed
+    assert [b for b in remove_boilerplate(blocks)] == [b for b in blocks if not b.type.startswith("page_")]

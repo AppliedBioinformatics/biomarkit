@@ -39,7 +39,8 @@ def test_cleaner_produces_markdown_from_fixture(tmp_path, active_corpus):
                       publication_filepath=pdf, content_json_filepath=json_path)
 
     cleaner = Cleaner(publications=[], cache=None, context=dict(
-        keep_figures=True, keep_tables=True, keep_latex=True, keep_references=True, normalise_imrad=False))
+        keep_figures=True, keep_tables=True, keep_latex=True, keep_references=True, keep_boilerplate=False,
+        normalise_imrad=False))
     markdown = cleaner.clean_from_json(pub)
 
     assert markdown.startswith("#")
@@ -47,3 +48,23 @@ def test_cleaner_produces_markdown_from_fixture(tmp_path, active_corpus):
     assert "](" in markdown  # image/chart links
     assert "$$\nG = \\frac {\\mathsf {Z Z ^ {\\prime}}}{\\sum p (1 - p)}\n$$" in markdown  # display equation
     assert pub.final_md_filepath == active_corpus.final_md_dir / "paper.md"
+
+
+def test_keep_boilerplate_controls_page_furniture(tmp_path, active_corpus):
+    from biomarkit.standardisation.text_cleaning.cleaner import Cleaner
+
+    pdf = tmp_path / "paper.pdf"
+    pdf.write_bytes(b"%PDF-1.4 %%EOF")
+    json_path = tmp_path / "paper" / "auto" / "paper_content_list_v2.json"
+    json_path.parent.mkdir(parents=True)
+    shutil.copy(FIXTURE, json_path)
+    pub = Publication(doi="10.1000/test.boilerplate", title="t", publisher="t", year=2026,
+                      publication_filepath=pdf, content_json_filepath=json_path)
+    base = dict(keep_figures=True, keep_tables=True, keep_latex=True, keep_references=True, normalise_imrad=False)
+
+    kept = Cleaner(publications=[], cache=None, context={**base, "keep_boilerplate": True}).clean_from_json(pub)
+    removed = Cleaner(publications=[], cache=None, context={**base, "keep_boilerplate": False}).clean_from_json(pub)
+
+    for text in ("*Correspondence:", "Page 2 of 24"):
+        assert text in kept
+        assert text not in removed

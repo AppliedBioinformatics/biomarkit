@@ -9,6 +9,7 @@ from biomarkit.standardisation.content_list.schema import (
     PageHeaderBlock, PageHeaderContent,
     PageFootnoteBlock, PageFootnoteContent,
     PageNumberBlock, PageNumberContent,
+    PageAsideTextBlock, PageAsideTextContent,
     ParagraphBlock, ParagraphContent,
     TableBlock, TableContent,
     TextSpan, TitleBlock, TitleContent,
@@ -99,10 +100,12 @@ def test_remove_boilerplate_strips_page_metadata():
     footer = PageFooterBlock(type="page_footer", content=PageFooterContent(page_footer_content=[]), bbox=_BBOX)
     number = PageNumberBlock(type="page_number", content=PageNumberContent(page_number_content=[]), bbox=_BBOX)
     footnote = PageFootnoteBlock(type="page_footnote", content=PageFootnoteContent(page_footnote_content=[]), bbox=_BBOX)
+    aside = PageAsideTextBlock(type="page_aside_text", content=PageAsideTextContent(page_aside_text_content=[]),
+                               bbox=_BBOX)
     para = make_paragraph("body text")
     title = make_title("Introduction")
 
-    result = remove_boilerplate([header, footer, number, footnote, para, title])
+    result = remove_boilerplate([header, footer, number, footnote, aside, para, title])
 
     assert all(b.type not in {"page_header", "page_footer", "page_number", "page_footnote"} for b in result)
     assert len(result) == 2

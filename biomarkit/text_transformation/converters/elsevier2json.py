@@ -1,7 +1,8 @@
 ﻿"""
 Parse Elsevier full-text XML articles into content_list_v2.json block format.
 Provides standalone parsing helpers and ElsevierXmlTransformer for use within
-the text-transformation pipeline.
+the text-transformation pipeline. Page furniture, footnotes and publication dates are not extracted, so
+keep_boilerplate has nothing to remove from Elsevier output.
 """
 
 import functools

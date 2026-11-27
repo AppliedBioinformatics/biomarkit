@@ -3,7 +3,8 @@ Parse PMC BioC XML articles (https://www.ncbi.nlm.nih.gov/research/bionlp/APIs/B
 block format. BioC is a flat list of passages, each tagged with a "type" infon (front, title_N, paragraph, table, ref, ...)
 and a "section_type" infon (INTRO, METHODS, TABLE, FIG, REF, ...). Table and figure parts share an "id" infon.
 
-BioC drops formulas from the passage text, so no equation blocks are produced.
+BioC drops formulas from the passage text, so no equation blocks are produced. Footnote passages and published peer-review
+history (REVIEW_INFO) are written as page_footnote / page_aside_text blocks, so keep_boilerplate controls them.
 """
 
 import json
@@ -28,6 +29,14 @@ def _para_block(text: str) -> dict:
 
 def _title_block(text: str, level: int) -> dict:
     return {"type": "title", "content": {"title_content": _text_spans(text), "level": level}, "bbox": [0, 0, 0, 0]}
+
+
+def _footnote_block(text: str) -> dict:
+    return {"type": "page_footnote", "content": {"page_footnote_content": _text_spans(text)}, "bbox": [0, 0, 0, 0]}
+
+
+def _aside_block(text: str) -> dict:
+    return {"type": "page_aside_text", "content": {"page_aside_text_content": _text_spans(text)}, "bbox": [0, 0, 0, 0]}
 
 
 def _reference_list_block(refs: list[str]) -> dict:
@@ -167,6 +176,14 @@ def parse_bioc_xml_to_blocks(xml_path: str) -> list:
             continue
 
         if section == "REF" or not text:
+            continue
+
+        # Journal boilerplate, removed by keep_boilerplate=False like MinerU's page-level blocks.
+        if ptype == "footnote":
+            blocks.append(_footnote_block(text))
+            continue
+        if section == "REVIEW_INFO":
+            blocks.append(_aside_block(text))
             continue
 
         if ptype == "front":

@@ -33,7 +33,7 @@ def make_title(text: str, level: int = 1) -> TitleBlock:
 def make_cleaner(max_workers: int = 1, **ctx_overrides) -> Cleaner:
     context = dict(
         keep_figures=False, keep_tables=False, keep_latex=False,
-        keep_references=False, normalise_imrad=False,
+        keep_references=False, keep_boilerplate=False, normalise_imrad=False,
     )
     context.update(ctx_overrides)
     return Cleaner(publications=[], context=context, cache=None, max_workers=max_workers)

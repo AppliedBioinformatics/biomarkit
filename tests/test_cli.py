@@ -9,7 +9,7 @@ def test_main_wires_flags_to_pipeline():
             patch("biomarkit.cli.download_corpus") as mock_download, \
             patch("biomarkit.cli.transform_text", return_value=["converted"]) as mock_transform, \
             patch("biomarkit.cli.standardise_text") as mock_standardise:
-        main(["my_corpus", "--skip-download", "--mineru-tier", "basic", "--no-imrad", "--keep-tables",
+        main(["my_corpus", "--skip-download", "--mineru-tier", "basic", "--no-imrad", "--keep-tables", "--keep-boilerplate",
               "--log-level", "DEBUG"])
 
     mock_logging.assert_called_once_with(level=10)
@@ -22,6 +22,7 @@ def test_main_wires_flags_to_pipeline():
     assert kwargs["normalise_imrad"] is False
     assert kwargs["keep_tables"] is True
     assert kwargs["keep_figures"] is False
+    assert kwargs["keep_boilerplate"] is True
     assert kwargs["max_workers"] == 4
 
 

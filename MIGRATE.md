@@ -325,6 +325,11 @@ each reference as a paragraph, which is kept. To update those papers, delete the
 under the corpus `intermediates/` folder and their Markdown files under `results/`, then re-run `transform_text()` and
 `standardise_text()` (XML conversion is fast and needs no GPU).
 
+`standardise_text(keep_boilerplate=False)` (CLI: `--keep-boilerplate`) is a new option. The default removes page
+headers, footers, page numbers, page footnotes and margin text, as before, so no code change is needed. For PMC BioC
+XML it now also removes footnotes and published peer-review history, which earlier versions kept as paragraphs;
+regenerate BioC JSON with the steps above to apply this to an existing corpus.
+
 ---
 
 ## Checklist

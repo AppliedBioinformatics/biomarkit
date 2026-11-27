@@ -9,10 +9,18 @@ from biomarkit.standardisation.content_list.schema import (
     ImageBlock,
     InlineEquation,
     ListBlock,
+    PageAsideTextBlock,
+    PageFooterBlock,
+    PageFootnoteBlock,
+    PageHeaderBlock,
+    PageNumberBlock,
     ParagraphBlock,
     TableBlock,
     TitleBlock,
 )
+
+# Page furniture kept with keep_boilerplate=True is rendered as plain text.
+_PAGE_BLOCKS = (PageHeaderBlock, PageFooterBlock, PageFootnoteBlock, PageNumberBlock, PageAsideTextBlock)
 
 _LEVEL_TO_HASHES = {1: "#", 2: "##", 3: "###", 4: "####"}
 
@@ -138,5 +146,9 @@ def render(blocks: list[ContentBlock], images_dir: Path | None = None) -> str:
                 parts.append(text)
         elif isinstance(block, ListBlock):
             parts.append(_render_list(block))
+        elif isinstance(block, _PAGE_BLOCKS):
+            text = _render_spans(getattr(block.content, f"{block.type}_content"))
+            if text.strip():
+                parts.append(text)
 
     return "\n\n".join(parts)

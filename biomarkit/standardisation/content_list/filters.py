@@ -26,7 +26,7 @@ _BOILERPLATE_TYPES = {"page_header", "page_footer", "page_number", "page_footnot
 
 
 def remove_boilerplate(blocks: list[ContentBlock]) -> list[ContentBlock]:
-    """Always-on: strip page headers, footers, numbers, footnotes and aside text."""
+    """Drop page headers, footers, page numbers, page footnotes and margin (aside) text."""
     return [b for b in blocks if b.type not in _BOILERPLATE_TYPES]
 
 

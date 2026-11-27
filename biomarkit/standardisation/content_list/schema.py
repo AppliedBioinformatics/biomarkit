@@ -104,6 +104,10 @@ class PageNumberContent(BaseModel):
     page_number_content: list[InlineContent]
 
 
+class PageAsideTextContent(BaseModel):
+    page_aside_text_content: list[InlineContent]
+
+
 
 # Top-level block models
 class ParagraphBlock(BaseModel):
@@ -172,6 +176,12 @@ class PageNumberBlock(BaseModel):
     bbox: tuple[float, float, float, float]
 
 
+class PageAsideTextBlock(BaseModel):
+    type: Literal["page_aside_text"]
+    content: PageAsideTextContent
+    bbox: tuple[float, float, float, float]
+
+
 class MiscBlock(BaseModel):
     """Catch-all for any block type not explicitly modelled."""
     type: str
@@ -194,6 +204,7 @@ _KNOWN_BLOCK_TYPES = Annotated[
         PageFooterBlock,
         PageFootnoteBlock,
         PageNumberBlock,
+        PageAsideTextBlock,
     ],
     Field(discriminator="type"),
 ]
@@ -203,7 +214,7 @@ ContentBlock = Union[_KNOWN_BLOCK_TYPES, MiscBlock]
 _KNOWN_TYPES = frozenset({
     "paragraph", "title", "image", "table", "chart", "list",
     "equation_interline", "page_header", "page_footer",
-    "page_footnote", "page_number",
+    "page_footnote", "page_number", "page_aside_text",
 })
 
 # Built once: constructing a TypeAdapter compiles its validation schema, which is expensive to repeat per block.

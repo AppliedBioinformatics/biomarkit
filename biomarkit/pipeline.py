@@ -359,6 +359,7 @@ def standardise_text(
     keep_tables: bool = False,
     keep_latex: bool = False,
     keep_references: bool = False,
+    keep_boilerplate: bool = False,
     normalise_imrad: bool = True,
     max_workers: int = 4,
 ) -> list[Publication]:
@@ -386,6 +387,9 @@ def standardise_text(
         When False, inline and block equations are replaced with a placeholder.
     keep_references : bool, default False
         When False, reference lists are replaced with a placeholder. Text outside the reference list is never removed.
+    keep_boilerplate : bool, default False
+        When False, page headers, footers, page numbers, page footnotes and margin text are removed. For PMC BioC XML,
+        footnotes and published peer-review history are removed; Elsevier XML contains none of these.
     normalise_imrad : bool, default True
         When True, attempt to trim each paper to its core text (Introduction to the end of the Discussion) and
         rename its section headings to Introduction / Methods / Results / Discussion, using regex matching with an
@@ -426,6 +430,7 @@ def standardise_text(
                "keep_tables": keep_tables,
                "keep_latex": keep_latex,
                "keep_references": keep_references,
+               "keep_boilerplate": keep_boilerplate,
                "normalise_imrad": normalise_imrad}
 
     # Instantiate the Cleaner class and clean the publications according to the params defined by the user.

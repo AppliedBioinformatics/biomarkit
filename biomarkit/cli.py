@@ -19,7 +19,7 @@ def main(argv=None):
     p.add_argument("--mineru-tier", choices=MINERU_TIER_CHOICES, default="standard")
     p.add_argument("--mineru-batch-size", type=int, help="PDFs per MinerU worker process (default: all at once).")
     p.add_argument("--xml-workers", type=int, help="Processes for Elsevier XML parsing (default: CPU cores - 1).")
-    for kind in ("figures", "tables", "latex", "references"):
+    for kind in ("figures", "tables", "latex", "references", "boilerplate"):
         p.add_argument(f"--keep-{kind}", action="store_true", help=f"Keep {kind} in the final Markdown.")
     p.add_argument("--no-imrad", action="store_true", help="Don't normalise headings to IMRAD (no LLM needed).")
     p.add_argument("--max-workers", type=int, default=4, help="Publications standardised concurrently.")
@@ -42,6 +42,7 @@ def main(argv=None):
     if not args.skip_standardise:
         standardise_text(publications, keep_figures=args.keep_figures, keep_tables=args.keep_tables,
                          keep_latex=args.keep_latex, keep_references=args.keep_references,
+                         keep_boilerplate=args.keep_boilerplate,
                          normalise_imrad=not args.no_imrad, max_workers=args.max_workers)
 
 

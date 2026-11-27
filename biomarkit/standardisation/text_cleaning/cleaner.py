@@ -67,6 +67,7 @@ class Cleaner:
         self.keep_tables = context["keep_tables"]
         self.keep_latex = context["keep_latex"]
         self.keep_references = context["keep_references"]
+        self.keep_boilerplate = context["keep_boilerplate"]
         self.normalise_imrad = context["normalise_imrad"]
 
     def _truncate_core_text(self, blocks):
@@ -376,10 +377,11 @@ class Cleaner:
         json_path = Path(pub.content_json_filepath)
         doc = Document.from_file(json_path)
 
-        # Non-optional boilerplate block removals.
-        blocks = remove_boilerplate(doc.blocks())
+        blocks = doc.blocks()
 
         # Optional filters depending on user preferences.
+        if not self.keep_boilerplate:
+            blocks = remove_boilerplate(blocks)
         if not self.keep_references:
             blocks = remove_references(blocks)
         if not self.keep_figures:
