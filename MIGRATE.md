@@ -312,6 +312,21 @@ Other changes in this release need no code change:
 
 ---
 
+## 8. After 1.1.0 (unreleased): `keep_references` removes typed reference lists only
+
+**Detect:** the project calls `standardise_text(keep_references=False)` (the default) on a corpus whose XML papers
+were converted by an earlier version.
+
+`keep_references=False` now replaces only blocks typed as reference lists (`list` blocks with
+`list_type == "reference_list"`) with `<references_removed>`. It no longer drops everything after a "References"
+heading, so text placed after the reference list (e.g. Methods in Nature-style papers) is always kept. MinerU JSON was
+already typed this way. Elsevier and BioC XML conversion now writes the same block, but JSON converted earlier stores
+each reference as a paragraph, which is kept. To update those papers, delete their `*_content_list_v2.json` files
+under the corpus `intermediates/` folder and their Markdown files under `results/`, then re-run `transform_text()` and
+`standardise_text()` (XML conversion is fast and needs no GPU).
+
+---
+
 ## Checklist
 
 - [ ] No hits remain for the Step 0 patterns.

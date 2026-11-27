@@ -215,80 +215,41 @@ def test_remove_figures_preserves_other_blocks():
 # remove_references
 # ---------------------------------------------------------------------------
 
-def test_remove_references_drops_from_heading_onwards():
-    blocks = [
-        make_paragraph("intro"),
-        make_title("References", level=1),
-        make_paragraph("citation 1"),
-    ]
-    result = remove_references(blocks)
-    assert len(result) == 1
-    assert result[0].content.paragraph_content[0].content == "intro"
+def make_reference_list() -> ListBlock:
+    item = ListItem(item_type="text", item_content=[TextSpan(type="text", content="Smith J. A paper. 2020.")])
+    return ListBlock(type="list", content=ListContent(list_type="reference_list", list_items=[item]), bbox=_BBOX)
 
 
-def test_remove_references_case_insensitive():
-    blocks = [make_paragraph("body"), make_title("REFERENCES", level=1)]
-    result = remove_references(blocks)
-    assert len(result) == 1
+def _texts(blocks) -> list[str]:
+    return [b.content.title_content[0].content if b.type == "title" else b.content.paragraph_content[0].content
+            for b in blocks if b.type in ("title", "paragraph")]
 
 
-def test_remove_references_bibliography_matched():
-    blocks = [make_paragraph("body"), make_title("Bibliography", level=1), make_paragraph("ref")]
-    result = remove_references(blocks)
-    assert len(result) == 1
+def test_remove_references_replaces_reference_list():
+    result = remove_references([make_title("References"), make_reference_list()])
+    assert _texts(result) == ["References", "<references_removed>"]
 
 
-def test_remove_references_resumes_at_same_level_heading():
-    blocks = [
-        make_title("Results", level=1),
-        make_title("References", level=1),
-        make_paragraph("dropped"),
-        make_title("Supplementary", level=1),
-        make_paragraph("kept"),
-    ]
-    result = remove_references(blocks)
-    texts = [b.content.title_content[0].content if b.type == "title"
-             else b.content.paragraph_content[0].content for b in result]
-    assert "Results" in texts
-    assert "Supplementary" in texts
-    assert "kept" in texts
-    assert "dropped" not in texts
-
-
-def test_remove_references_higher_level_heading_not_absorbed():
-    blocks = [
-        make_title("References", level=2),
-        make_paragraph("dropped"),
-        make_title("Appendix", level=1),
-        make_paragraph("kept"),
-    ]
-    result = remove_references(blocks)
-    assert any(b.type == "title" and b.content.title_content[0].content == "Appendix" for b in result)
-    assert any(b.type == "paragraph" and b.content.paragraph_content[0].content == "kept" for b in result)
-    assert not any(b.type == "paragraph" and b.content.paragraph_content[0].content == "dropped" for b in result)
-
-
-def test_remove_references_no_references_section_unchanged():
-    blocks = [make_paragraph("body"), make_title("Discussion", level=1)]
+def test_remove_references_keeps_text_lists():
+    blocks = [make_paragraph("body"), make_list_block()]
     assert remove_references(blocks) == blocks
 
 
-@pytest.mark.parametrize("heading", [
-    "7. References", "7 References", "VII. References", "References:", "  References.", "## References",
-    "Reference", "References and Notes", "References Cited", "Reference list", "Cited literature",
-    "Literature Cited", "Works Cited",
-])
-def test_remove_references_heading_variants_matched(heading):
-    blocks = [make_paragraph("body"), make_title(heading, level=1), make_paragraph("citation")]
-    assert len(remove_references(blocks)) == 1
+def test_remove_references_does_not_truncate_following_sections():
+    # Nature-style order: Methods after References, at a lower heading level than References.
+    blocks = [
+        make_title("Discussion", level=1), make_paragraph("discussion"),
+        make_title("References", level=1), make_reference_list(),
+        make_title("Methods", level=2), make_paragraph("methods"),
+    ]
+    assert _texts(remove_references(blocks)) == [
+        "Discussion", "discussion", "References", "<references_removed>", "Methods", "methods"]
 
 
-@pytest.mark.parametrize("heading", [
-    "Reference genome assembly", "References to prior work in the Introduction", "Cross-references", "Preferences",
-])
-def test_remove_references_non_reference_headings_kept(heading):
-    blocks = [make_paragraph("body"), make_title(heading, level=1), make_paragraph("text")]
+def test_remove_references_untyped_entries_left_in_place():
+    blocks = [make_paragraph("body"), make_title("References"), make_paragraph("Smith J. A paper. 2020.")]
     assert remove_references(blocks) == blocks
+
 
 # ---------------------------------------------------------------------------
 # Removed blocks leave only the placeholder in rendered output

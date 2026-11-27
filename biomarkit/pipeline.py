@@ -385,7 +385,7 @@ def standardise_text(
     keep_latex : bool, default False
         When False, inline and block equations are replaced with a placeholder.
     keep_references : bool, default False
-        When False, an attempt is made to remove the references section from the paper.
+        When False, reference lists are replaced with a placeholder. Text outside the reference list is never removed.
     normalise_imrad : bool, default True
         When True, attempt to trim each paper to its core text (Introduction to the end of the Discussion) and
         rename its section headings to Introduction / Methods / Results / Discussion, using regex matching with an

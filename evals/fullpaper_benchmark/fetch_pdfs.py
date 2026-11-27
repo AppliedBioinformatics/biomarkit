@@ -1,11 +1,7 @@
 """
-Download the publisher (version-of-record) PDFs for the full-paper benchmark candidates.
+Download publisher PDFs for the full-paper candidates; failures are listed in manual_downloads.csv.
 
-    uv run python evals/fullpaper_benchmark/fetch_pdfs.py
-
-Runs in the biomarkit environment and calls its publisher clients directly, skipping the open-access/BioC routes.
-Elsevier PDFs come from the Article API (Accept: application/pdf), PLOS PDFs from the journal's printable URL.
-Ids with a PDF already are skipped. Failures go to manual_downloads.csv: save those to pdfs/manual/<id>.pdf.
+    uv run python evals/fullpaper_benchmark/fetch_pdfs.py   # biomarkit environment
 """
 import json
 import shutil

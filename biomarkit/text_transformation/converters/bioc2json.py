@@ -30,6 +30,12 @@ def _title_block(text: str, level: int) -> dict:
     return {"type": "title", "content": {"title_content": _text_spans(text), "level": level}, "bbox": [0, 0, 0, 0]}
 
 
+def _reference_list_block(refs: list[str]) -> dict:
+    # Same shape as MinerU's content_list_v2 reference lists, so keep_references treats both routes alike.
+    items = [{"item_type": "text", "item_content": _text_spans(ref)} for ref in refs]
+    return {"type": "list", "content": {"list_type": "reference_list", "list_items": items}, "bbox": [0, 0, 0, 0]}
+
+
 def _clean(text: str | None) -> str:
     return " ".join((text or "").split())
 
@@ -185,7 +191,7 @@ def parse_bioc_xml_to_blocks(xml_path: str) -> list:
 
     if refs:
         blocks.append(_title_block("References", 2))
-        blocks.extend(_para_block(ref) for ref in refs)
+        blocks.append(_reference_list_block(refs))
 
     return [blocks]
 

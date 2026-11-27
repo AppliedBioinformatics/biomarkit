@@ -80,7 +80,7 @@ def test_parse_bioc_block_order_and_levels(tmp_path):
         ("title", 2, "Abbreviations"),
         ("paragraph", None, "BWT: Burrows-Wheeler transform"),
         ("title", 2, "References"),
-        ("paragraph", None, "Smith JA, Doe J. A paper title. Bioinformatics 2009;25:1754-1760"),
+        ("list", None, None),
     ]
 
 
@@ -114,7 +114,15 @@ def test_parse_bioc_output_is_tagged_for_filters(tmp_path):
 
     assert "<table_removed>" in texts
     assert "<figure_removed>" in texts
+    assert "<references_removed>" in texts
     assert not any("Smith JA" in t for t in texts)
+
+
+def test_parse_bioc_references_emitted_as_reference_list(tmp_path):
+    blocks = parse_bioc_xml_to_blocks(str(_write(tmp_path)))[0]
+    ref_lists = [b for b in blocks if b["type"] == "list" and b["content"]["list_type"] == "reference_list"]
+    assert len(ref_lists) == 1
+    assert any("Smith JA" in i["item_content"][0]["content"] for i in ref_lists[0]["content"]["list_items"])
 
 
 def test_table_html_bad_xml_returns_none():

@@ -1,5 +1,4 @@
 ﻿from __future__ import annotations
-import re
 from biomarkit.standardisation.content_list.schema import (
     ChartBlock,
     ContentBlock,
@@ -22,15 +21,6 @@ def _placeholder(text: str) -> ParagraphBlock:
         content=ParagraphContent(paragraph_content=[TextSpan(type="text", content=text)]),
         bbox=(0, 0, 0, 0),
     )
-
-# REGEX patterns to identify reference/bibliography content blocks.
-# Allows an optional section number ("7.", "7", "VII.") and trailing punctuation ("References:").
-_REFERENCES_RE = re.compile(
-    r"^[\s\W]*(?:(?:\d+|[ivxlc]+)(?:[.):]\s*|\s+))?"
-    r"(references?(?:\s+(?:and\s+notes|cited|list))?|bibliography|works\s+cited|literature\s+cited|cited\s+literature)"
-    r"[\s\W]*$",
-    re.IGNORECASE,
-)
 
 _BOILERPLATE_TYPES = {"page_header", "page_footer", "page_number", "page_footnote", "page_aside_text"}
 
@@ -91,21 +81,11 @@ def remove_figures(blocks: list[ContentBlock]) -> list[ContentBlock]:
     return result
 
 def remove_references(blocks: list[ContentBlock]) -> list[ContentBlock]:
-    """Drop the references section and everything after it until the next same-or-higher heading."""
+    """Replace reference lists (list blocks typed "reference_list") with a <references_removed> placeholder."""
     result = []
-    skipping = False
-    ref_level: int | None = None
-
     for block in blocks:
-        if isinstance(block, TitleBlock):
-            if _REFERENCES_RE.match(block.content.text):
-                skipping = True
-                ref_level = block.content.level
-                continue
-            if skipping and block.content.level <= ref_level:
-                skipping = False
-
-        if not skipping:
+        if isinstance(block, ListBlock) and block.content.list_type == "reference_list":
+            result.append(_placeholder("<references_removed>"))
+        else:
             result.append(block)
-
     return result

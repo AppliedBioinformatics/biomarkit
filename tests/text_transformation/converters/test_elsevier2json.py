@@ -200,6 +200,20 @@ def test_extract_references_empty_when_none():
     assert extract_references(ET.fromstring(xml)) == []
 
 
+def test_parse_references_emitted_as_reference_list(tmp_path):
+    bib = (f'<ce:bib-reference xmlns:ce="{CE}"><ce:other-ref xmlns:ce="{CE}">'
+           f'<ce:source-text xmlns:ce="{CE}">Doe J. (2020). A paper. Nature.</ce:source-text>'
+           f'</ce:other-ref></ce:bib-reference>')
+    xml_path = tmp_path / "refs.xml"
+    xml_path.write_text(_article_xml().replace("</ja:head>", f"</ja:head>{bib}"), encoding="utf-8")
+    blocks = parse_elsevier_xml_to_blocks(str(xml_path))[0]
+
+    ref_lists = [b for b in blocks if b["type"] == "list" and b["content"]["list_type"] == "reference_list"]
+    assert len(ref_lists) == 1
+    assert "Doe J." in ref_lists[0]["content"]["list_items"][0]["item_content"][0]["content"]
+    assert not any(b["type"] == "paragraph" and "Doe J." in str(b) for b in blocks)
+
+
 # ---------------------------------------------------------------------------
 # ElsevierXmlTransformer.transform2json
 # ---------------------------------------------------------------------------
